@@ -160,6 +160,15 @@ pub fn replace_all(app: &AppHandle, current: &Hotkeys, next: &Hotkeys) -> Result
     Ok(())
 }
 
+/// Drop and register every hotkey again. Used once macOS lets go of a
+/// screenshot shortcut, so the key reaches Lockshot without a relaunch.
+pub fn reregister_all(app: &AppHandle, hotkeys: &Hotkeys) -> Vec<String> {
+    for action in ACTIONS {
+        unregister(app, hotkeys.get(action).unwrap_or_default());
+    }
+    register_all(app, hotkeys)
+}
+
 pub fn set_paused(app: &AppHandle, paused: bool) {
     *app.state::<HotkeyState>().paused.lock().unwrap() = paused;
 }

@@ -2749,6 +2749,7 @@ dependencies = [
  "flate2",
  "image",
  "objc2",
+ "plist",
  "serde",
  "serde_json",
  "tauri",

@@ -1,5 +1,5 @@
 import { isMac } from "./platform";
-import type { HotkeyAction, OsName } from "./types";
+import type { HotkeyAction, Hotkeys, OsName, SystemShortcut } from "./types";
 
 export const HOTKEY_ACTIONS: { id: HotkeyAction; label: string; hint: string }[] = [
   { id: "area", label: "Capture area", hint: "Drag to select part of a screen. Click without dragging for the whole screen." },
@@ -92,4 +92,40 @@ export function systemPreset(os: OsName): { label: string; hotkeys: Partial<Reco
     return { label: "Use PrtSc / Ctrl+PrtSc", hotkeys: { area: "PrintScreen", screen: "Ctrl+PrintScreen" } };
   }
   return { label: "Use PrtSc / Shift+PrtSc", hotkeys: { area: "PrintScreen", screen: "Shift+PrintScreen" } };
+}
+
+const MODIFIER_ALIASES: Record<string, string> = {
+  control: "ctrl", ctrl: "ctrl", alt: "alt", option: "alt", shift: "shift",
+  cmd: "cmd", command: "cmd", super: "cmd", meta: "cmd", commandorcontrol: "cmd", cmdorctrl: "cmd",
+};
+
+/** An accelerator in one canonical form, so "Shift+Cmd+4" equals "Cmd+Shift+4". */
+function canonical(accelerator: string) {
+  const parts = accelerator.split("+").filter(Boolean);
+  const key = (parts.pop() ?? "").toLowerCase();
+  const mods = parts.map((p) => MODIFIER_ALIASES[p.toLowerCase()] ?? p.toLowerCase()).sort();
+  return [...mods, key].join("+");
+}
+
+export interface SystemClash {
+  action: HotkeyAction;
+  accelerator: string;
+  system: SystemShortcut;
+}
+
+/**
+ * Lockshot hotkeys that the OS's own screenshot shortcuts still own. macOS
+ * lets Lockshot register them without complaint, but its own shortcut wins,
+ * so these keys open the system screenshot tool instead of Lockshot.
+ */
+export function systemClashes(hotkeys: Hotkeys | undefined, system: SystemShortcut[]): SystemClash[] {
+  if (!hotkeys) return [];
+  const clashes: SystemClash[] = [];
+  for (const { id } of HOTKEY_ACTIONS) {
+    const accelerator = hotkeys[id];
+    if (!accelerator) continue;
+    const owner = system.find((s) => s.enabled && canonical(s.accelerator) === canonical(accelerator));
+    if (owner) clashes.push({ action: id, accelerator, system: owner });
+  }
+  return clashes;
 }

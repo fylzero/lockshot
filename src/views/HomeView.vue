@@ -3,9 +3,10 @@ import { computed, onMounted, ref } from "vue";
 import Icon from "../components/Icon.vue";
 import PermissionCard from "../components/PermissionCard.vue";
 import HotkeyRecorder from "../components/HotkeyRecorder.vue";
+import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
 import { env, openImageFile, saveSettingsSoon, settings, showToast } from "../store";
-import { acceleratorKeys } from "../hotkeys";
+import { acceleratorKeys, systemPreset } from "../hotkeys";
 import type { HotkeyAction, PermissionStatus } from "../types";
 
 /*
@@ -63,8 +64,21 @@ async function setHotkey(action: HotkeyAction, accelerator: string) {
   try {
     const saved = await api.setHotkey(action, accelerator);
     if (settings.value) settings.value.hotkeys = saved.hotkeys;
+    return true;
   } catch (err) {
     showToast(errorMessage(err), "error");
+    return false;
+  }
+}
+
+const preset = computed(() => systemPreset(env.os));
+
+/* One click to the system screenshot keys; if macOS still owns them, the
+   notice below appears with the steps to free them. */
+async function usePreset() {
+  if (!preset.value) return;
+  for (const [action, accelerator] of Object.entries(preset.value.hotkeys)) {
+    if (!(await setHotkey(action as HotkeyAction, accelerator))) return;
   }
 }
 </script>
@@ -107,8 +121,10 @@ async function setHotkey(action: HotkeyAction, accelerator: string) {
             </div>
             <p class="muted" style="margin: 0.6rem 0 0; font-size: 0.85rem">
               Want {{ env.os === "macos" ? "⌘⇧4" : "PrtSc" }} instead?
-              <RouterLink to="/settings/hotkeys">See how to take over the system keys.</RouterLink>
+              <button v-if="env.os === 'macos' && preset" class="link" @click="usePreset">Use ⌘⇧4 and ⌘⇧3 for Lockshot.</button>
+              <RouterLink v-else to="/settings/hotkeys">See how to take over the system keys.</RouterLink>
             </p>
+            <SystemShortcutNotice style="margin: 0.8rem 0 0" />
             <p v-if="env.os === 'linux'" class="muted" style="margin: 0.6rem 0 0; font-size: 0.85rem">
               On Wayland, bind <code>lockshot --area</code> and <code>lockshot --screen</code> in your desktop's keyboard settings instead.
             </p>
@@ -148,6 +164,8 @@ async function setHotkey(action: HotkeyAction, accelerator: string) {
             </div>
           </div>
         </div>
+
+        <SystemShortcutNotice />
 
         <div class="capture-cards">
           <button class="capture-card" @click="capture('area')">

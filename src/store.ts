@@ -1,8 +1,9 @@
 import { reactive, ref, watch } from "vue";
 import { api, errorMessage } from "./api";
 import { themePreference } from "./theme";
-import type { CaptureReady, ExportFormat, OsName, Settings } from "./types";
+import type { CaptureReady, ExportFormat, OsName, Settings, SystemShortcut } from "./types";
 import { formatFilename } from "./filename";
+import { systemClashes } from "./hotkeys";
 
 export const settings = ref<Settings | null>(null);
 export const env = reactive({
@@ -12,6 +13,47 @@ export const env = reactive({
   os: "macos" as OsName,
   hotkeyErrors: [] as string[],
 });
+
+/**
+ * The OS's own screenshot shortcuts. Refreshed whenever the window comes
+ * back to the front, so a warning about one clears as soon as the user has
+ * turned it off in System Settings.
+ */
+export const systemShortcuts = ref<SystemShortcut[]>([]);
+
+/**
+ * Re-read the OS's screenshot shortcuts. `keysFreed` says the caller just
+ * freed some itself, so register the hotkeys again even though the list it
+ * already stored shows no change.
+ */
+export async function refreshSystemShortcuts(keysFreed = false) {
+  const before = clashKeys();
+  try {
+    systemShortcuts.value = await api.systemScreenshotShortcuts();
+  } catch {
+    systemShortcuts.value = [];
+  }
+  /* macOS just gave a key back: register again so it reaches Lockshot now. */
+  const after = clashKeys();
+  if (keysFreed || before.some((k) => !after.includes(k))) {
+    try {
+      env.hotkeyErrors = await api.reregisterHotkeys();
+    } catch {
+      /* The warning has cleared either way; a failure shows up as usual. */
+    }
+  }
+}
+
+function clashKeys() {
+  return systemClashes(settings.value?.hotkeys, systemShortcuts.value).map((c) => c.accelerator);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("focus", () => void refreshSystemShortcuts());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshSystemShortcuts();
+  });
+}
 
 /** A capture open in an editor tab, with the file name it was given. */
 export type CaptureDoc = CaptureReady & { name: string; takenAt: Date };
@@ -34,7 +76,9 @@ export function showToast(
 ) {
   clearTimeout(toastTimer);
   toast.value = { id: Date.now(), message, kind, action };
-  toastTimer = setTimeout(() => (toast.value = null), kind === "error" ? 7000 : 4000);
+  /* Errors and toasts with a button (like Undo) stay long enough to act on. */
+  const ms = action ? 10000 : kind === "error" ? 7000 : 4000;
+  toastTimer = setTimeout(() => (toast.value = null), ms);
 }
 
 export function dismissToast() {
@@ -51,6 +95,7 @@ export async function loadSettings() {
   env.hotkeyErrors = boot.hotkeyErrors;
   settings.value = boot.settings;
   themePreference.value = boot.settings.theme;
+  void refreshSystemShortcuts();
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;

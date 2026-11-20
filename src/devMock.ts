@@ -42,6 +42,15 @@ function sampleImage() {
 }
 
 export function installMock() {
+  /* macOS's screenshot shortcuts; add #sysfree to the URL to start with them off. */
+  const on = !location.hash.includes("sysfree");
+  let mockShortcuts = [
+    { id: "28", label: "Save picture of screen as a file", accelerator: "Shift+Cmd+3", enabled: on },
+    { id: "29", label: "Copy picture of screen to the clipboard", accelerator: "Ctrl+Shift+Cmd+3", enabled: true },
+    { id: "30", label: "Save picture of selected area as a file", accelerator: "Shift+Cmd+4", enabled: on },
+    { id: "31", label: "Copy picture of selected area to the clipboard", accelerator: "Ctrl+Shift+Cmd+4", enabled: true },
+    { id: "184", label: "Screenshot and recording options", accelerator: "Shift+Cmd+5", enabled: false },
+  ];
   const sample = sampleImage();
   let settings = {
     hotkeys: { area: "Alt+Shift+4", screen: "Alt+Shift+3", editor: "Alt+Shift+L" },
@@ -87,6 +96,13 @@ export function installMock() {
         return settings;
       case "latest_capture":
         return location.hash.includes("empty") ? null : { id: "sample", width: 1600, height: 1000 };
+      case "reregister_hotkeys":
+        return [];
+      case "system_screenshot_shortcuts":
+        return mockShortcuts;
+      case "set_system_screenshot_shortcuts":
+        mockShortcuts = mockShortcuts.map((s) => (a.ids.includes(s.id) ? { ...s, enabled: a.enabled } : s));
+        return mockShortcuts;
       case "permission_status":
       case "request_screen_permission":
         return { screen: location.hash.includes("denied") ? "denied" : "granted", os: "macos", wayland: false };

@@ -6,6 +6,7 @@ import type {
   HotkeyAction,
   PermissionStatus,
   Settings,
+  SystemShortcut,
 } from "./types";
 
 export const api = {
@@ -35,6 +36,10 @@ export const api = {
   requestScreenPermission: () => invoke<PermissionStatus>("request_screen_permission"),
   openSystemSettings: (target: "screen-recording" | "keyboard-shortcuts") =>
     invoke<void>("open_system_settings", { target }),
+  systemScreenshotShortcuts: () => invoke<SystemShortcut[]>("system_screenshot_shortcuts"),
+  reregisterHotkeys: () => invoke<string[]>("reregister_hotkeys"),
+  setSystemScreenshotShortcuts: (ids: string[], enabled: boolean) =>
+    invoke<SystemShortcut[]>("set_system_screenshot_shortcuts", { ids, enabled }),
   takePendingRoute: () => invoke<string | null>("take_pending_route"),
   hideMain: () => invoke<void>("hide_main"),
 

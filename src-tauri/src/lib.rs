@@ -7,6 +7,7 @@ mod hotkeys;
 mod menu;
 mod platform;
 mod settings;
+mod system_shortcuts;
 mod tray;
 
 use std::sync::Mutex;
@@ -195,6 +196,9 @@ pub fn run() {
             commands::permission_status,
             commands::request_screen_permission,
             commands::open_system_settings,
+            commands::system_screenshot_shortcuts,
+            commands::reregister_hotkeys,
+            commands::set_system_screenshot_shortcuts,
             commands::hide_main,
             take_pending_route,
         ])

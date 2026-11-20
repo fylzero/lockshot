@@ -9,11 +9,12 @@ import Icon from "../components/Icon.vue";
 import HotkeyRecorder from "../components/HotkeyRecorder.vue";
 import JsonEditor from "../components/JsonEditor.vue";
 import PermissionCard from "../components/PermissionCard.vue";
+import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
-import { env, saveSettingsSoon, settings, showToast } from "../store";
+import { env, saveSettingsSoon, settings, showToast, systemShortcuts } from "../store";
 import { ALL_FORMATS, FORMAT_INFO } from "../formats";
 import { DEFAULT_TEMPLATE, FILENAME_TOKENS, formatFilename } from "../filename";
-import { HOTKEY_ACTIONS, formatAccelerator, systemPreset } from "../hotkeys";
+import { HOTKEY_ACTIONS, formatAccelerator, systemClashes, systemPreset } from "../hotkeys";
 import { THEME_OPTIONS } from "../theme";
 import { fileManagerName, modKey } from "../platform";
 import type { HotkeyAction } from "../types";
@@ -81,6 +82,7 @@ async function resetHotkeys() {
 }
 
 const preset = computed(() => systemPreset(env.os));
+const clashCount = computed(() => systemClashes(settings.value?.hotkeys, systemShortcuts.value).length);
 
 async function applyPreset() {
   if (!preset.value) return;
@@ -88,7 +90,11 @@ async function applyPreset() {
     await setHotkey(action as HotkeyAction, accelerator);
     if (hotkeyError.value) return;
   }
-  showToast("Now using the system screenshot keys.");
+  showToast(
+    clashCount.value
+      ? "Almost there: turn off macOS's own screenshot shortcuts, as shown at the top."
+      : "Now using the system screenshot keys.",
+  );
 }
 
 async function openKeyboardSettings() {
@@ -213,7 +219,7 @@ const EDITOR_KEYS = [
         :class="{ active: section === s.id }"
       >
         <Icon :name="s.icon" /> {{ s.label }}
-        <span v-if="s.id === 'hotkeys' && env.hotkeyErrors.length" class="dot" />
+        <span v-if="s.id === 'hotkeys' && (env.hotkeyErrors.length || clashCount)" class="dot" />
       </RouterLink>
     </nav>
 
@@ -352,6 +358,7 @@ const EDITOR_KEYS = [
             <p class="muted">Pick a different combination below, or free it up in the app that owns it.</p>
           </div>
         </div>
+        <SystemShortcutNotice />
         <div v-if="hotkeyError" class="notice bad">
           <Icon name="info" />
           <div><strong>{{ hotkeyError }}</strong></div>
@@ -390,8 +397,8 @@ const EDITOR_KEYS = [
               <template v-if="env.os === 'macos'">
                 macOS keeps <kbd>⌘⇧3</kbd>, <kbd>⌘⇧4</kbd> and <kbd>⌘⇧5</kbd> for its own Screenshot app. To hand them to Lockshot:
                 <ol class="steps">
-                  <li>Open <strong>System Settings › Keyboard › Keyboard Shortcuts…</strong></li>
-                  <li>Choose <strong>Screenshots</strong> and untick the shortcuts you want Lockshot to have.</li>
+                  <li>Click <strong>Open keyboard settings</strong> below. It opens the Keyboard Shortcuts window (or the Keyboard page: click <strong>Keyboard Shortcuts…</strong> there).</li>
+                  <li>Click <strong>Screenshots</strong> in the list on the left, untick the shortcuts you want Lockshot to have, and click <strong>Done</strong>.</li>
                   <li>Come back here and click <strong>{{ preset?.label }}</strong>.</li>
                 </ol>
               </template>

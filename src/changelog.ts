@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Crop has Apply (Enter) and Cancel (Esc).",
       "Thicker default annotation sizes, a new Extra large size, and a new color set with pink as default.",
       "Settings has a JSON page for editing, importing and exporting settings.json.",
+      "If macOS's own screenshot shortcuts still own a Lockshot hotkey, Lockshot says so and can turn them off for you, with Undo.",
       "Lockshot starts at login. Turn it off in Settings → General.",
       "Setup's Screen Recording step and the Home tab icon are tidied up.",
     ],

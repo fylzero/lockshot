@@ -24,6 +24,16 @@ export interface Settings {
   setupStep: string;
 }
 
+/** One of the OS's own screenshot shortcuts (macOS only for now). */
+export interface SystemShortcut {
+  /** macOS's id for it, used to turn it off or back on. */
+  id: string;
+  /** As System Settings › Keyboard Shortcuts › Screenshots names it. */
+  label: string;
+  accelerator: string;
+  enabled: boolean;
+}
+
 export interface Bootstrap {
   settings: Settings;
   defaultSaveDir: string;

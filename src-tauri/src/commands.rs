@@ -114,6 +114,15 @@ pub fn reset_hotkeys(app: AppHandle, state: State<AppState>) -> Result<Settings,
     }
 }
 
+/// Register the current hotkeys again, after macOS has given one back.
+#[tauri::command]
+pub fn reregister_hotkeys(app: AppHandle, state: State<AppState>) -> Vec<String> {
+    let hotkeys = state.settings.lock().unwrap().hotkeys.clone();
+    let errors = hotkeys::reregister_all(&app, &hotkeys);
+    *state.hotkey_errors.lock().unwrap() = errors.clone();
+    errors
+}
+
 #[tauri::command]
 pub fn pause_hotkeys(app: AppHandle, paused: bool) {
     hotkeys::set_paused(&app, paused);
@@ -389,6 +398,23 @@ pub fn open_system_settings(app: AppHandle, target: String) -> Result<(), String
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|err| format!("Could not open system settings: {err}"))
+}
+
+/// The OS's own screenshot shortcuts and whether each is still on, so the
+/// app can warn when a Lockshot hotkey is still owned by the system.
+#[tauri::command]
+pub fn system_screenshot_shortcuts() -> Vec<crate::system_shortcuts::SystemShortcut> {
+    crate::system_shortcuts::screenshot_shortcuts()
+}
+
+/// Turn macOS's own screenshot shortcuts (by id) off, or back on to undo,
+/// after the user confirmed it in the app. Returns the list as it now stands.
+#[tauri::command]
+pub fn set_system_screenshot_shortcuts(
+    ids: Vec<String>,
+    enabled: bool,
+) -> Result<Vec<crate::system_shortcuts::SystemShortcut>, String> {
+    crate::system_shortcuts::set_screenshot_shortcuts(&ids, enabled)
 }
 
 /// Hide the editor window back to the tray.
