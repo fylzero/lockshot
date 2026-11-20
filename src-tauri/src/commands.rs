@@ -1,0 +1,260 @@
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use serde::{Deserialize, Serialize};
+use tauri::ipc::{InvokeBody, Request};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri_plugin_opener::OpenerExt;
+
+use crate::capture::{self, CaptureReady, Rect};
+use crate::export;
+use crate::hotkeys;
+use crate::platform::{self, PermissionStatus};
+use crate::settings::{self, Hotkeys, Settings};
+use crate::tray;
+
+pub struct AppState {
+    pub settings: Mutex<Settings>,
+    /// Hotkeys that could not be registered at launch, shown in Settings.
+    pub hotkey_errors: Mutex<Vec<String>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bootstrap {
+    settings: Settings,
+    default_save_dir: String,
+    settings_path: String,
+    formats: Vec<&'static str>,
+    os: &'static str,
+    hotkey_errors: Vec<String>,
+}
+
+#[tauri::command]
+pub fn bootstrap(app: AppHandle, state: State<AppState>) -> Bootstrap {
+    Bootstrap {
+        settings: state.settings.lock().unwrap().clone(),
+        default_save_dir: settings::default_save_dir(&app).display().to_string(),
+        settings_path: settings::path(&app)
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+        formats: export::supported_formats(),
+        os: platform::os_name(),
+        hotkey_errors: state.hotkey_errors.lock().unwrap().clone(),
+    }
+}
+
+/// Save everything except the hotkeys, which only change through
+/// `set_hotkey` so the OS registrations stay in step.
+#[tauri::command]
+pub fn update_settings(
+    app: AppHandle,
+    state: State<AppState>,
+    next: Settings,
+) -> Result<Settings, String> {
+    let mut current = state.settings.lock().unwrap();
+    let hotkeys = current.hotkeys.clone();
+    let mut next = next;
+    next.hotkeys = hotkeys;
+    if !export::FORMATS.contains(&next.format.as_str()) {
+        next.format = "png".into();
+    }
+    next.jpeg_quality = next.jpeg_quality.clamp(1, 100);
+    settings::save(&app, &next)?;
+    *current = next.clone();
+    Ok(next)
+}
+
+fn store_hotkeys(app: &AppHandle, state: &AppState, hotkeys: Hotkeys) -> Result<Settings, String> {
+    let mut current = state.settings.lock().unwrap();
+    current.hotkeys = hotkeys;
+    settings::save(app, &current)?;
+    tray::refresh(app, &current.hotkeys);
+    state.hotkey_errors.lock().unwrap().clear();
+    Ok(current.clone())
+}
+
+#[tauri::command]
+pub fn set_hotkey(
+    app: AppHandle,
+    state: State<AppState>,
+    action: String,
+    accelerator: String,
+) -> Result<Settings, String> {
+    let accelerator = accelerator.trim().to_string();
+    let mut hotkeys = state.settings.lock().unwrap().hotkeys.clone();
+    hotkeys::rebind(&app, &hotkeys, &action, &accelerator)?;
+    hotkeys.set(&action, accelerator);
+    store_hotkeys(&app, &state, hotkeys)
+}
+
+#[tauri::command]
+pub fn reset_hotkeys(app: AppHandle, state: State<AppState>) -> Result<Settings, String> {
+    let defaults = Hotkeys::default();
+    let mut hotkeys = state.settings.lock().unwrap().hotkeys.clone();
+    let mut errors = Vec::new();
+    for action in settings::ACTIONS {
+        let wanted = defaults.get(action).unwrap_or_default().to_string();
+        match hotkeys::rebind(&app, &hotkeys, action, &wanted) {
+            Ok(()) => {
+                hotkeys.set(action, wanted);
+            }
+            Err(err) => errors.push(err),
+        }
+    }
+    let settings = store_hotkeys(&app, &state, hotkeys)?;
+    if errors.is_empty() {
+        Ok(settings)
+    } else {
+        Err(errors.join(" "))
+    }
+}
+
+#[tauri::command]
+pub fn pause_hotkeys(app: AppHandle, paused: bool) {
+    hotkeys::set_paused(&app, paused);
+}
+
+#[tauri::command]
+pub fn validate_hotkey(accelerator: String) -> Result<(), String> {
+    hotkeys::parse(&accelerator).map(|_| ())
+}
+
+/// Start a capture from a button in the window, which first gets out of the
+/// way so it is not in the shot.
+#[tauri::command]
+pub async fn capture(app: AppHandle, mode: String) -> Result<(), String> {
+    if let Some(main) = app.get_webview_window("main") {
+        if main.is_visible().unwrap_or(false) {
+            let _ = main.hide();
+            /* Give the compositor a moment to take the window off screen. */
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+    match mode.as_str() {
+        "area" => capture::start_area(&app),
+        "screen" => capture::capture_screen(&app),
+        _ => Err("Unknown capture mode.".into()),
+    }
+}
+
+#[tauri::command]
+pub async fn open_image(app: AppHandle, path: String) -> Result<(), String> {
+    capture::open_file(&app, std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub fn finish_area(
+    app: AppHandle,
+    window: WebviewWindow,
+    rect: Option<Rect>,
+) -> Result<(), String> {
+    capture::finish_area(&app, window.label(), rect)
+}
+
+#[tauri::command]
+pub fn cancel_area(app: AppHandle) {
+    capture::cancel_area(&app);
+}
+
+#[tauri::command]
+pub fn latest_capture(app: AppHandle) -> Option<CaptureReady> {
+    capture::latest(&app)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveOptions {
+    format: String,
+    /// An exact path from a Save As dialog, written over if it exists.
+    path: Option<String>,
+    /// Otherwise a folder (empty for the default) and a file name without
+    /// extension, made unique if taken.
+    dir: Option<String>,
+    name: Option<String>,
+}
+
+/**
+ * Write the edited image. The body is raw bytes: a little-endian u32 length,
+ * that many bytes of JSON SaveOptions, then the PNG. Raw keeps a large
+ * screenshot from being inflated into a JSON number array.
+ */
+#[tauri::command]
+pub fn save_image(
+    app: AppHandle,
+    state: State<AppState>,
+    request: Request,
+) -> Result<String, String> {
+    let InvokeBody::Raw(body) = request.body() else {
+        return Err("Expected the image as raw bytes.".into());
+    };
+    if body.len() < 4 {
+        return Err("The image data is empty.".into());
+    }
+    let json_len = u32::from_le_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    let json = body
+        .get(4..4 + json_len)
+        .ok_or("The save options are cut short.")?;
+    let png = &body[4 + json_len..];
+    let options: SaveOptions = serde_json::from_slice(json)
+        .map_err(|err| format!("Could not read the save options: {err}"))?;
+
+    let settings = state.settings.lock().unwrap().clone();
+    let ext = export::extension(&options.format);
+    let path = match options.path.filter(|p| !p.trim().is_empty()) {
+        Some(path) => PathBuf::from(path),
+        None => {
+            let dir = match options.dir.filter(|d| !d.trim().is_empty()) {
+                Some(dir) => PathBuf::from(dir),
+                None => settings::resolved_save_dir(&app, &settings),
+            };
+            let stem = export::sanitize_file_stem(options.name.as_deref().unwrap_or("Screenshot"));
+            export::unique_path(&dir, &stem, ext)
+        }
+    };
+    export::write(png, &options.format, settings.jpeg_quality, &path)?;
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
+pub fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|err| format!("Could not show the file: {err}"))
+}
+
+#[tauri::command]
+pub fn reveal_settings_file(app: AppHandle) -> Result<(), String> {
+    let path = settings::path(&app)?;
+    if !path.exists() {
+        let current = app.state::<AppState>().settings.lock().unwrap().clone();
+        settings::save(&app, &current)?;
+    }
+    reveal_path(app, path.display().to_string())
+}
+
+#[tauri::command]
+pub fn permission_status() -> PermissionStatus {
+    platform::permission_status()
+}
+
+#[tauri::command]
+pub fn request_screen_permission() -> PermissionStatus {
+    platform::request_screen_permission();
+    platform::permission_status()
+}
+
+#[tauri::command]
+pub fn open_system_settings(app: AppHandle, target: String) -> Result<(), String> {
+    let url =
+        platform::settings_url(&target).ok_or("There is no settings page for that on this OS.")?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|err| format!("Could not open system settings: {err}"))
+}
+
+/// Hide the editor window back to the tray.
+#[tauri::command]
+pub fn hide_main(app: AppHandle) {
+    crate::hide_main(&app);
+}

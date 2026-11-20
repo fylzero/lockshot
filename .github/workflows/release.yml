@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+env:
+  RELEASE_BODY: >-
+    macOS: download Lockshot-macos-arm64.dmg for Apple Silicon Macs.
+    Linux: download Lockshot-linux-x64.AppImage, .deb, or .rpm for Intel and AMD PCs,
+    or the Lockshot-linux-arm64 files for ARM.
+    Windows: download Lockshot-windows-x64.exe for Intel and AMD PCs, or Lockshot-windows-arm64.exe for ARM.
+    The Windows installer isn't code-signed yet, so SmartScreen may warn: click More info, then Run anyway.
+
+jobs:
+  macos:
+    permissions:
+      contents: write
+    runs-on: macos-latest
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Require Apple release credentials
+        shell: bash
+        run: |
+          missing=0
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing repository secret: $name. See docs/macos-releases.md."
+              missing=1
+            fi
+          done
+          if [[ "$missing" == 1 ]]; then exit 1; fi
+          if [[ "$APPLE_SIGNING_IDENTITY" != "Developer ID Application: "* ]]; then
+            echo "::error::APPLE_SIGNING_IDENTITY must be a Developer ID Application identity."
+            exit 1
+          fi
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # This wrapper verifies packaged apps before the action uploads anything.
+          tauriScript: bash scripts/build-macos-release.sh
+          tagName: v__VERSION__
+          releaseName: Lockshot v__VERSION__
+          releaseBody: ${{ env.RELEASE_BODY }}
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          args: "--target aarch64-apple-darwin"
+          releaseAssetNamePattern: "Lockshot-macos-arm64[ext]"
+
+  linux:
+    # Runs after macOS and one architecture at a time, so each upload merges into
+    # the release's latest.json instead of racing another job and dropping its entries.
+    needs: macos
+    permissions:
+      contents: write
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache apt packages
+        uses: actions/cache@v5
+        with:
+          path: ~/apt-cache
+          key: apt-${{ runner.arch }}-${{ hashFiles('.github/workflows/*.yml') }}
+          restore-keys: apt-${{ runner.arch }}-
+
+      - name: Install Linux build dependencies
+        timeout-minutes: 18
+        run: |
+          sudo rm -f /var/lib/man-db/auto-update
+          mkdir -p ~/apt-cache/partial
+          apt="apt-get -o Dir::Cache::Archives=$HOME/apt-cache -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o DPkg::Lock::Timeout=60"
+          for attempt in 1 2 3; do
+            if sudo timeout 300 sh -c "$apt update && $apt install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev libpipewire-0.3-dev libclang-dev libxcb1-dev libxcb-randr0-dev libdbus-1-dev libgbm-dev libegl-dev patchelf"; then
+              sudo chown -R "$USER" ~/apt-cache
+              exit 0
+            fi
+            echo "::warning::apt-get attempt $attempt failed or stalled, retrying on archive.ubuntu.com"
+            sudo sed -i 's#http://azure.archive.ubuntu.com/#http://archive.ubuntu.com/#' /etc/apt/apt-mirrors.txt 2>/dev/null || true
+            sudo dpkg --configure -a || true
+            sleep 10
+          done
+          exit 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: bun run tauri
+          tagName: v__VERSION__
+          releaseName: Lockshot v__VERSION__
+          releaseBody: ${{ env.RELEASE_BODY }}
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          releaseAssetNamePattern: "Lockshot-linux-${{ matrix.arch }}[ext]"
+
+  windows:
+    # Runs after Linux and one architecture at a time for the same latest.json reason.
+    # ARM64 is cross-compiled on the x64 runner, which has the MSVC ARM64 build tools.
+    needs: linux
+    permissions:
+      contents: write
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          key: ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # The package.json script sets PATH the Unix way, which would break PATH on Windows.
+          tauriScript: bunx tauri
+          tagName: v__VERSION__
+          releaseName: Lockshot v__VERSION__
+          releaseBody: ${{ env.RELEASE_BODY }}
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          args: "--target ${{ matrix.target }} --bundles nsis"
+          releaseAssetNamePattern: "Lockshot-windows-${{ matrix.arch }}[ext]"

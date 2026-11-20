@@ -1,0 +1,192 @@
+mod capture;
+mod commands;
+mod export;
+mod hotkeys;
+mod platform;
+mod settings;
+mod tray;
+
+use std::sync::Mutex;
+
+static PENDING_ROUTE: Mutex<Option<String>> = Mutex::new(None);
+
+/// The route the window was last asked to show, cleared once read.
+#[tauri::command]
+fn take_pending_route() -> Option<String> {
+    PENDING_ROUTE.lock().unwrap().take()
+}
+
+use commands::AppState;
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+
+/// Bring the main window forward, optionally on a route like
+/// "/settings/hotkeys" or "/editor/<id>".
+pub fn show_main(app: &AppHandle, route: Option<&str>) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    /* The page may still be loading and miss the event; it asks on mount. */
+    *PENDING_ROUTE.lock().unwrap() = route.map(str::to_string);
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+        if cfg!(debug_assertions) {
+            let _ = app.run_on_main_thread(platform::restore_dock_icon);
+        }
+    }
+    if let Some(route) = route {
+        let _ = window.emit("navigate", route);
+    }
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Back to living in the tray. On macOS that also drops the Dock icon.
+pub fn hide_main(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+}
+
+/// `lockshot --area` / `lockshot --screen`, for desktops (Wayland) where
+/// hotkeys have to be bound in the system settings instead.
+fn cli_action(args: &[String]) -> Option<&'static str> {
+    args.iter().skip(1).find_map(|arg| match arg.as_str() {
+        "--area" => Some("area"),
+        "--screen" => Some("screen"),
+        "--open" => Some("editor"),
+        _ => None,
+    })
+}
+
+/// Run a hotkey or tray action. Captures run off the event loop so a slow
+/// grab of several monitors never stalls the UI.
+pub fn run_action(app: &AppHandle, action: &str) {
+    let app = app.clone();
+    match action {
+        "area" | "screen" => {
+            let action = action.to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                let result = if action == "area" {
+                    capture::start_area(&app)
+                } else {
+                    capture::capture_screen(&app)
+                };
+                if let Err(err) = result {
+                    let _ = app.emit_to("main", "capture-error", err);
+                }
+            });
+        }
+        "editor" => show_main(&app, None),
+        _ => {}
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            /* A second launch hands its arguments to the running copy. */
+            match cli_action(&args) {
+                Some(action) => run_action(app, action),
+                None => show_main(app, None),
+            }
+        }))
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(hotkeys::handle)
+                .build(),
+        )
+        .register_uri_scheme_protocol("capture", capture::protocol)
+        .setup(|app| {
+            let handle = app.handle().clone();
+            /*
+             * A bundled build starts menu-bar-only straight away; its .app
+             * supplies the name and icon. An unbundled dev binary has to
+             * finish launching as a regular app first, or macOS never picks
+             * up its name and icon and Cmd+Tab shows a generic "exec" entry.
+             * It goes menu-bar-only on Ready (below) if no window is open.
+             */
+            #[cfg(all(target_os = "macos", not(debug_assertions)))]
+            handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+
+            let settings = settings::load(&handle);
+            app.manage(capture::CaptureState::default());
+            app.manage(hotkeys::HotkeyState::default());
+            let errors = hotkeys::register_all(&handle, &settings.hotkeys);
+            tray::build(&handle, &settings.hotkeys)?;
+
+            let first_run = !settings.onboarded;
+            app.manage(AppState {
+                settings: Mutex::new(settings),
+                hotkey_errors: Mutex::new(errors.clone()),
+            });
+            /* First launch, or a hotkey that could not be claimed, needs the window. */
+            let args: Vec<String> = std::env::args().collect();
+            if let Some(action) = cli_action(&args) {
+                run_action(&handle, action);
+            } else if first_run {
+                show_main(&handle, Some("/"));
+            } else if !errors.is_empty() {
+                show_main(&handle, Some("/settings/hotkeys"));
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    hide_main(window.app_handle());
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::bootstrap,
+            commands::update_settings,
+            commands::set_hotkey,
+            commands::reset_hotkeys,
+            commands::pause_hotkeys,
+            commands::validate_hotkey,
+            commands::capture,
+            commands::open_image,
+            commands::finish_area,
+            commands::cancel_area,
+            commands::latest_capture,
+            commands::save_image,
+            commands::reveal_path,
+            commands::reveal_settings_file,
+            commands::permission_status,
+            commands::request_screen_permission,
+            commands::open_system_settings,
+            commands::hide_main,
+            take_pending_route,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building Lockshot")
+        .run(|_app, event| match event {
+            /* Closing the last window must not quit a tray app. */
+            tauri::RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
+                api.prevent_exit();
+            }
+            #[cfg(all(target_os = "macos", debug_assertions))]
+            tauri::RunEvent::Ready => {
+                platform::set_dev_display_name(&_app.package_info().name);
+                let visible = _app
+                    .get_webview_window("main")
+                    .and_then(|w| w.is_visible().ok())
+                    .unwrap_or(false);
+                if !visible {
+                    let _ = _app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                }
+            }
+            _ => {}
+        });
+}

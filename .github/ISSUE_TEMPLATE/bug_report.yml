@@ -1,0 +1,72 @@
+name: Bug Report
+description: Report a problem or unexpected behavior in Lockshot
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us diagnose and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what went wrong
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Press the capture area hotkey...
+        2. Click on...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Lockshot Version
+      description: Which version of Lockshot are you using? (Check the version in the lower right of the Lockshot window)
+      placeholder: e.g., 0.1.0
+
+  - type: input
+    id: macos
+    attributes:
+      label: Operating System
+      description: Your macOS or Windows version, or your Linux distro, version, and desktop
+      placeholder: e.g., macOS 15.5, Windows 11 24H2, or Ubuntu 24.04 (GNOME, Wayland)
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Screenshots
+      description: If applicable, add screenshots, error messages, or relevant log output
+      placeholder: Paste error messages or drag images here
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (number of displays, screen scaling, Wayland or X11, etc.)
