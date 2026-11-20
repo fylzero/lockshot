@@ -632,6 +632,131 @@ a {
   margin: 0 0 1.25rem;
 }
 
+/* The JSON section fills the height, and its editor scrolls instead. */
+.settings-body.fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 1.5rem;
+}
+
+.json-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.json-head > div:first-child {
+  min-width: 0;
+}
+
+.json-path {
+  margin: 0;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.json-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 12rem;
+  display: flex;
+}
+
+.json-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.9rem;
+  z-index: 2;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.json-editor {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(max-content, 1fr);
+  /* At least as tall as the box, so the gutter and click target fill it. */
+  grid-template-rows: minmax(100%, max-content);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+  font-family: var(--font-code);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.json-editor:focus-within {
+  border-color: var(--accent);
+}
+
+.json-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding: 0.75rem 0.75rem 0.75rem 1rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.json-gutter .bad {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+.json-code {
+  position: relative;
+}
+
+.json-code pre,
+.json-code textarea {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.json-code pre {
+  color: var(--text);
+  pointer-events: none;
+}
+
+.json-code textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.json-code textarea::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.json-code .j-key { color: var(--text); }
+.json-code .j-str { color: var(--accent-text); }
+.json-code .j-num { color: #d9a54a; }
+.json-code .j-word { color: #6ea8fe; }
+:root[data-theme="light"] .json-code .j-num { color: #a3610b; }
+:root[data-theme="light"] .json-code .j-word { color: #2b62c7; }
+
 .card {
   border: 1px solid var(--border);
   border-radius: 10px;

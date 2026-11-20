@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     notes: [
       "The Home tab shows the same Lockshot icon as the menu bar instead of a house, and is a little wider so it's easier to click.",
       "Setup's Screen Recording step is a single, roomier card. Allow access and Relaunch Lockshot sit side by side, and Open System Settings is a link in the steps.",
+      "Settings has a JSON page for editing settings.json directly, with line numbers and highlighting. Save checks everything first and points to the line with a problem. Import loads a settings file to look over before saving, Export writes your settings to a file, and Reveal shows where the file lives.",
     ],
   },
   {

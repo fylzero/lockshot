@@ -120,9 +120,101 @@ pub fn load(app: &AppHandle) -> Settings {
 
 pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     let path = path(app)?;
-    let raw = serde_json::to_string_pretty(settings)
-        .map_err(|err| format!("Could not serialize {SETTINGS_FILE}: {err}"))?;
-    fs::write(&path, raw).map_err(|err| format!("Could not write {SETTINGS_FILE}: {err}"))
+    fs::write(&path, to_json(settings)?)
+        .map_err(|err| format!("Could not write {SETTINGS_FILE}: {err}"))
+}
+
+/// Settings as the pretty JSON the settings file holds.
+pub fn to_json(settings: &Settings) -> Result<String, String> {
+    serde_json::to_string_pretty(settings)
+        .map(|raw| raw + "\n")
+        .map_err(|err| format!("Could not serialize {SETTINGS_FILE}: {err}"))
+}
+
+pub const THEMES: [&str; 3] = ["system", "light", "dark"];
+pub const SETUP_STEPS: [&str; 4] = ["", "permission", "hotkeys", "tray"];
+
+/**
+ * Read settings JSON typed or imported by the user. Unlike `load`, which
+ * quietly falls back to defaults, this says exactly what is wrong: bad JSON
+ * with its line and column, a misspelled key, or a value out of range.
+ * Missing keys keep their defaults. Hotkey combos are checked by the caller,
+ * which owns the OS registrations.
+ */
+pub fn from_json(raw: &str) -> Result<Settings, String> {
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|err| {
+        format!(
+            "Line {}, column {}: {}",
+            err.line(),
+            err.column(),
+            json_error_text(&err)
+        )
+    })?;
+    if !value.is_object() {
+        return Err("Settings must be a JSON object, like { \"format\": \"png\" }.".into());
+    }
+    let settings: Settings = serde_json::from_value(value.clone())
+        .map_err(|err| format!("{}.", capitalize(&err.to_string())))?;
+    let known = serde_json::to_value(&settings).map_err(|err| err.to_string())?;
+    if let Some(key) = unknown_key(&value, &known, "") {
+        return Err(format!("\"{key}\" is not a Lockshot setting."));
+    }
+    if !crate::export::FORMATS.contains(&settings.format.as_str()) {
+        return Err(format!(
+            "\"format\" must be one of {}.",
+            crate::export::FORMATS.join(", ")
+        ));
+    }
+    if !(1..=100).contains(&settings.jpeg_quality) {
+        return Err("\"jpegQuality\" must be between 1 and 100.".into());
+    }
+    if !THEMES.contains(&settings.theme.as_str()) {
+        return Err(format!("\"theme\" must be one of {}.", THEMES.join(", ")));
+    }
+    if !SETUP_STEPS.contains(&settings.setup_step.as_str()) {
+        return Err("\"setupStep\" must be \"permission\", \"hotkeys\", \"tray\" or empty.".into());
+    }
+    Ok(settings)
+}
+
+/// The first key in `given` that `known` does not have, as a dotted path.
+fn unknown_key(
+    given: &serde_json::Value,
+    known: &serde_json::Value,
+    prefix: &str,
+) -> Option<String> {
+    let (Some(given), Some(known)) = (given.as_object(), known.as_object()) else {
+        return None;
+    };
+    for (key, value) in given {
+        let path = format!("{prefix}{key}");
+        match known.get(key) {
+            None => return Some(path),
+            Some(inner) => {
+                if let Some(found) = unknown_key(value, inner, &format!("{path}.")) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// serde_json's message without the " at line X column Y" it appends.
+fn json_error_text(err: &serde_json::Error) -> String {
+    let text = err.to_string();
+    let text = text
+        .rsplit_once(" at line ")
+        .map_or(text.as_str(), |(head, _)| head);
+    capitalize(text)
+}
+
+fn capitalize(text: &str) -> String {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+        .unwrap_or_default()
 }
 
 /// The folder Save uses when the user has not picked one.
@@ -140,5 +232,56 @@ pub fn resolved_save_dir(app: &AppHandle, settings: &Settings) -> PathBuf {
         default_save_dir(app)
     } else {
         PathBuf::from(settings.save_dir.trim())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trips_the_defaults() {
+        let raw = to_json(&Settings::default()).unwrap();
+        let parsed = from_json(&raw).unwrap();
+        assert_eq!(to_json(&parsed).unwrap(), raw);
+    }
+
+    #[test]
+    fn missing_keys_keep_their_defaults() {
+        let parsed = from_json(r#"{ "format": "jpg", "hotkeys": { "area": "" } }"#).unwrap();
+        assert_eq!(parsed.format, "jpg");
+        assert_eq!(parsed.hotkeys.area, "");
+        assert_eq!(parsed.hotkeys.screen, Hotkeys::default().screen);
+        assert_eq!(parsed.jpeg_quality, 90);
+    }
+
+    #[test]
+    fn reports_where_the_json_breaks() {
+        let err = from_json("{\n  \"format\": \"png\",\n}").unwrap_err();
+        assert!(err.starts_with("Line 3, column 1: "), "{err}");
+        assert!(!err.contains(" at line "), "{err}");
+    }
+
+    #[test]
+    fn rejects_unknown_keys() {
+        assert_eq!(
+            from_json(r#"{ "fromat": "png" }"#).unwrap_err(),
+            "\"fromat\" is not a Lockshot setting."
+        );
+        assert_eq!(
+            from_json(r#"{ "hotkeys": { "window": "Alt+W" } }"#).unwrap_err(),
+            "\"hotkeys.window\" is not a Lockshot setting."
+        );
+    }
+
+    #[test]
+    fn rejects_bad_values() {
+        assert!(from_json(r#"{ "format": "webp" }"#).is_err());
+        assert!(from_json(r#"{ "jpegQuality": 0 }"#).is_err());
+        assert!(from_json(r#"{ "jpegQuality": 300 }"#).is_err());
+        assert!(from_json(r#"{ "theme": "blue" }"#).is_err());
+        assert!(from_json(r#"{ "setupStep": "later" }"#).is_err());
+        assert!(from_json(r#"{ "copyOnCapture": "yes" }"#).is_err());
+        assert!(from_json("[]").is_err());
     }
 }

@@ -112,6 +112,54 @@ pub fn rebind(app: &AppHandle, hotkeys: &Hotkeys, action: &str, next: &str) -> R
     Ok(())
 }
 
+/**
+ * Switch every hotkey to `next` at once, so combos can swap between actions.
+ * Checks them all first; if the OS refuses one, the new registrations are
+ * dropped and the old ones restored, and the error is returned.
+ */
+pub fn replace_all(app: &AppHandle, current: &Hotkeys, next: &Hotkeys) -> Result<(), String> {
+    let mut seen = HashMap::new();
+    for action in ACTIONS {
+        let accelerator = next.get(action).unwrap_or_default();
+        if accelerator.is_empty() {
+            continue;
+        }
+        let shortcut = parse(accelerator)?;
+        if seen.insert(shortcut.id(), action).is_some() {
+            return Err(format!("{accelerator} is set for more than one action."));
+        }
+    }
+
+    let changed: Vec<&str> = ACTIONS
+        .into_iter()
+        .filter(|a| current.get(a) != next.get(a))
+        .collect();
+    for action in &changed {
+        unregister(app, current.get(action).unwrap_or_default());
+    }
+    let mut registered = Vec::new();
+    for action in &changed {
+        let accelerator = next.get(action).unwrap_or_default();
+        if accelerator.is_empty() {
+            continue;
+        }
+        if let Err(err) = register(app, action, accelerator) {
+            for accelerator in registered {
+                unregister(app, accelerator);
+            }
+            for action in &changed {
+                let old = current.get(action).unwrap_or_default();
+                if !old.is_empty() {
+                    let _ = register(app, action, old);
+                }
+            }
+            return Err(err);
+        }
+        registered.push(accelerator);
+    }
+    Ok(())
+}
+
 pub fn set_paused(app: &AppHandle, paused: bool) {
     *app.state::<HotkeyState>().paused.lock().unwrap() = paused;
 }

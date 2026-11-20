@@ -68,6 +68,16 @@ export function installMock() {
           os: "macos",
           hotkeyErrors: [],
         };
+      case "settings_json":
+      case "import_settings_json":
+        return JSON.stringify(settings, null, 2) + "\n";
+      case "apply_settings_json":
+        try {
+          settings = { ...settings, ...JSON.parse(a.raw) };
+        } catch (err) {
+          throw `Line 1, column 1: ${err}`;
+        }
+        return settings;
       case "update_settings":
         settings = a.next;
         return settings;

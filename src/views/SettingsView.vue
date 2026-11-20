@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import { open } from "@tauri-apps/plugin-dialog";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import Icon from "../components/Icon.vue";
 import HotkeyRecorder from "../components/HotkeyRecorder.vue";
+import JsonEditor from "../components/JsonEditor.vue";
 import PermissionCard from "../components/PermissionCard.vue";
 import { api, errorMessage } from "../api";
 import { env, saveSettingsSoon, settings, showToast } from "../store";
@@ -21,10 +23,12 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: "appearance" },
   { id: "hotkeys", label: "Hotkeys", icon: "keyboard" },
   { id: "permissions", label: "Permissions", icon: "shield" },
+  { id: "json", label: "JSON", icon: "document" },
   { id: "about", label: "About", icon: "info" },
 ];
 
 const route = useRoute();
+const router = useRouter();
 const section = computed(() => (route.params.section as string) || "general");
 const version = ref("");
 const hotkeyError = ref("");
@@ -95,6 +99,101 @@ async function openKeyboardSettings() {
   }
 }
 
+/* ---- JSON ---- */
+
+const JSON_FILTERS = [{ name: "JSON", extensions: ["json"] }];
+const json = ref("");
+const savedJson = ref("");
+const jsonError = ref("");
+const jsonBusy = ref(false);
+const jsonDirty = computed(() => json.value !== savedJson.value);
+const jsonErrorLine = computed(() => Number(jsonError.value.match(/^Line (\d+),/)?.[1]) || null);
+
+async function loadJson() {
+  try {
+    json.value = savedJson.value = await api.settingsJson();
+    jsonError.value = "";
+  } catch (err) {
+    jsonError.value = errorMessage(err);
+  }
+}
+
+/* Show the latest settings, unless there are edits here to keep. */
+watch(
+  [section, settings],
+  () => {
+    if (section.value === "json" && !jsonDirty.value) void loadJson();
+  },
+  { immediate: true, deep: true },
+);
+
+async function saveJson() {
+  if (jsonBusy.value) return;
+  jsonBusy.value = true;
+  try {
+    settings.value = await api.applySettingsJson(json.value);
+    env.hotkeyErrors = (await api.bootstrap()).hotkeyErrors;
+    await loadJson();
+    showToast("Settings saved.");
+  } catch (err) {
+    jsonError.value = errorMessage(err);
+  } finally {
+    jsonBusy.value = false;
+  }
+}
+
+function revertJson() {
+  json.value = savedJson.value;
+  jsonError.value = "";
+}
+
+async function importJson() {
+  const picked = await open({ title: "Import settings", multiple: false, filters: JSON_FILTERS });
+  if (typeof picked !== "string") return;
+  try {
+    json.value = await api.importSettingsJson(picked);
+    jsonError.value = "";
+    showToast("Imported. Look it over, then Save to use it.");
+  } catch (err) {
+    jsonError.value = errorMessage(err);
+  }
+}
+
+async function exportJson() {
+  const picked = await saveDialog({
+    title: "Export settings",
+    defaultPath: "lockshot-settings.json",
+    filters: JSON_FILTERS,
+  });
+  if (!picked) return;
+  try {
+    await api.exportSettingsJson(picked);
+    showToast(
+      jsonDirty.value ? "Exported your saved settings, without the unsaved edits." : "Settings exported.",
+      "info",
+      { label: `Show in ${fileManagerName}`, run: () => void api.revealPath(picked) },
+    );
+  } catch (err) {
+    showToast(errorMessage(err), "error");
+  }
+}
+
+async function copyJson() {
+  try {
+    await writeText(json.value);
+    showToast("JSON copied.");
+  } catch (err) {
+    showToast(errorMessage(err), "error");
+  }
+}
+
+function onJsonKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    void saveJson();
+  }
+}
+
 const EDITOR_KEYS = [
   ["V", "Select and move"], ["A", "Arrow"], ["L", "Line"], ["R", "Rectangle"], ["O", "Ellipse"],
   ["P", "Pen"], ["H", "Highlighter"], ["T", "Text"], ["N", "Numbered step"], ["B", "Pixelate"],
@@ -118,7 +217,7 @@ const EDITOR_KEYS = [
       </RouterLink>
     </nav>
 
-    <div class="settings-body">
+    <div class="settings-body" :class="{ fill: section === 'json' }">
       <!-- General -->
       <template v-if="section === 'general'">
         <h2>General</h2>
@@ -197,6 +296,7 @@ const EDITOR_KEYS = [
               <button @click="api.revealSettingsFile().catch((e) => showToast(errorMessage(e), 'error'))">
                 Show in {{ fileManagerName }}
               </button>
+              <button @click="router.push('/settings/json')">Edit JSON</button>
             </div>
           </div>
         </div>
@@ -337,6 +437,33 @@ const EDITOR_KEYS = [
         <h2>Permissions</h2>
         <p class="muted">What your OS needs to let Lockshot capture the screen.</p>
         <PermissionCard />
+      </template>
+
+      <!-- JSON -->
+      <template v-else-if="section === 'json'">
+        <div class="json-head">
+          <div>
+            <h2>JSON</h2>
+            <p class="muted json-path" :title="env.settingsPath">{{ env.settingsPath }}</p>
+          </div>
+          <div class="row-control">
+            <button @click="api.revealSettingsFile().catch((e) => showToast(errorMessage(e), 'error'))">Reveal</button>
+            <button @click="importJson"><Icon name="import" /> Import</button>
+            <button @click="exportJson"><Icon name="export" /> Export</button>
+            <button v-if="jsonDirty" class="ghost" @click="revertJson">Revert</button>
+            <button class="primary" :disabled="!jsonDirty || jsonBusy" @click="saveJson">Save</button>
+          </div>
+        </div>
+
+        <div v-if="jsonError" class="notice bad">
+          <Icon name="info" />
+          <div><strong>{{ jsonError }}</strong></div>
+        </div>
+
+        <div class="json-wrap" @keydown="onJsonKeydown">
+          <button class="json-copy" @click="copyJson"><Icon name="copy" /> Copy</button>
+          <JsonEditor v-model="json" :error-line="jsonErrorLine" />
+        </div>
       </template>
 
       <!-- About -->

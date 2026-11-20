@@ -10,7 +10,7 @@ use crate::capture::{self, CaptureReady, OverlayStart, Rect};
 use crate::export;
 use crate::hotkeys;
 use crate::platform::{self, PermissionStatus};
-use crate::settings::{self, Hotkeys, Settings};
+use crate::settings::{self, Hotkeys, Settings, ACTIONS};
 use crate::tray;
 
 pub struct AppState {
@@ -93,7 +93,7 @@ pub fn reset_hotkeys(app: AppHandle, state: State<AppState>) -> Result<Settings,
     let defaults = Hotkeys::default();
     let mut hotkeys = state.settings.lock().unwrap().hotkeys.clone();
     let mut errors = Vec::new();
-    for action in settings::ACTIONS {
+    for action in ACTIONS {
         let wanted = defaults.get(action).unwrap_or_default().to_string();
         match hotkeys::rebind(&app, &hotkeys, action, &wanted) {
             Ok(()) => {
@@ -242,6 +242,71 @@ pub fn reveal_settings_file(app: AppHandle) -> Result<(), String> {
         settings::save(&app, &current)?;
     }
     reveal_path(app, path.display().to_string())
+}
+
+/// The settings as the JSON page shows them.
+#[tauri::command]
+pub fn settings_json(state: State<AppState>) -> Result<String, String> {
+    settings::to_json(&state.settings.lock().unwrap())
+}
+
+/**
+ * Replace every setting with JSON from the editor. Nothing changes unless all
+ * of it is valid and every hotkey can be registered.
+ */
+#[tauri::command]
+pub fn apply_settings_json(
+    app: AppHandle,
+    state: State<AppState>,
+    raw: String,
+) -> Result<Settings, String> {
+    let next = settings::from_json(&raw)?;
+    if !export::supported_formats().contains(&next.format.as_str()) {
+        return Err(format!(
+            "\"format\": {} is not available on this computer.",
+            next.format
+        ));
+    }
+    let mut current = state.settings.lock().unwrap();
+    let hotkeys_changed = ACTIONS
+        .iter()
+        .any(|a| current.hotkeys.get(a) != next.hotkeys.get(a));
+    hotkeys::replace_all(&app, &current.hotkeys, &next.hotkeys)?;
+    if let Err(err) = settings::save(&app, &next) {
+        let _ = hotkeys::replace_all(&app, &next.hotkeys, &current.hotkeys);
+        return Err(err);
+    }
+    *current = next.clone();
+    if hotkeys_changed {
+        tray::refresh(&app, &next.hotkeys);
+        state.hotkey_errors.lock().unwrap().clear();
+    }
+    Ok(next)
+}
+
+/// Biggest file Import will read; real settings are well under 1 KB.
+const IMPORT_LIMIT: u64 = 1024 * 1024;
+
+/// Read a settings file to show in the editor. It is checked but not applied
+/// until the user saves.
+#[tauri::command]
+pub fn import_settings_json(path: String) -> Result<String, String> {
+    let size = std::fs::metadata(&path)
+        .map_err(|err| format!("Could not read {path}: {err}"))?
+        .len();
+    if size > IMPORT_LIMIT {
+        return Err("That file is too big to be Lockshot settings.".into());
+    }
+    let raw =
+        std::fs::read_to_string(&path).map_err(|err| format!("Could not read {path}: {err}"))?;
+    settings::to_json(&settings::from_json(&raw)?)
+}
+
+/// Write the saved settings to a file of the user's choosing.
+#[tauri::command]
+pub fn export_settings_json(state: State<AppState>, path: String) -> Result<(), String> {
+    let raw = settings::to_json(&state.settings.lock().unwrap())?;
+    std::fs::write(&path, raw).map_err(|err| format!("Could not write {path}: {err}"))
 }
 
 #[tauri::command]
