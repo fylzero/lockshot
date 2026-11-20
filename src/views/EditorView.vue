@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { writeImage } from "@tauri-apps/plugin-clipboard-manager";
 import Icon from "../components/Icon.vue";
 import ExportBar from "../components/ExportBar.vue";
@@ -22,6 +21,7 @@ import {
 } from "../annotate";
 import { current, settings, showToast } from "../store";
 import { errorMessage } from "../api";
+import { loadBitmap } from "../pixels";
 import { modKey } from "../platform";
 
 const TOOLS: { id: Tool; label: string; key: string }[] = [
@@ -56,7 +56,7 @@ const editingText = ref("");
 const past = ref<{ shapes: Shape[]; crop: Rect | null }[]>([]);
 const future = ref<{ shapes: Shape[]; crop: Rect | null }[]>([]);
 
-const image = shallowRef<HTMLImageElement | null>(null);
+const image = shallowRef<ImageBitmap | null>(null);
 const loadError = ref("");
 const canvas = ref<HTMLCanvasElement | null>(null);
 const stage = ref<HTMLDivElement | null>(null);
@@ -67,8 +67,8 @@ const dpr = window.devicePixelRatio || 1;
 const zoom = ref(1);
 const fitMode = ref(true);
 
-const width = computed(() => image.value?.naturalWidth ?? 0);
-const height = computed(() => image.value?.naturalHeight ?? 0);
+const width = computed(() => image.value?.width ?? 0);
+const height = computed(() => image.value?.height ?? 0);
 /** Annotation sizes scale with the capture so they read the same on Retina and 1x shots. */
 const unit = computed(() => Math.max(1, Math.min(width.value, height.value) / 600));
 const cssScale = computed(() => zoom.value / dpr);
@@ -88,23 +88,28 @@ watch(
   () => current.value?.id,
   (id) => {
     reset();
+    image.value?.close();
     image.value = null;
     loadError.value = "";
     if (!id) return;
-    const img = new Image();
-    img.onload = async () => {
-      if (current.value?.id !== id) return;
-      image.value = img;
-      await nextTick();
-      fitMode.value = true;
-      fit();
-      draw();
-      if (settings.value?.copyOnCapture) void copy(true);
-    };
-    img.onerror = () => {
-      loadError.value = "This capture is no longer available. Take a new one.";
-    };
-    img.src = convertFileSrc(`image/${id}`, "capture");
+    const { width: w, height: h } = current.value!;
+    loadBitmap(`image/${id}`, w, h)
+      .then(async (bitmap) => {
+        if (current.value?.id !== id) {
+          bitmap.close();
+          return;
+        }
+        image.value?.close();
+        image.value = bitmap;
+        await nextTick();
+        fitMode.value = true;
+        fit();
+        draw();
+        if (settings.value?.copyOnCapture) void copy(true);
+      })
+      .catch(() => {
+        if (current.value?.id === id) loadError.value = "This capture is no longer available. Take a new one.";
+      });
   },
   { immediate: true },
 );
@@ -198,8 +203,8 @@ function paint() {
   const img = image.value;
   const el = canvas.value;
   if (!img || !el) return;
-  if (el.width !== img.naturalWidth) el.width = img.naturalWidth;
-  if (el.height !== img.naturalHeight) el.height = img.naturalHeight;
+  if (el.width !== img.width) el.width = img.width;
+  if (el.height !== img.height) el.height = img.height;
   const ctx = el.getContext("2d")!;
   ctx.clearRect(0, 0, el.width, el.height);
   ctx.drawImage(img, 0, 0);

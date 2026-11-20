@@ -123,6 +123,12 @@ pub fn run() {
             app.manage(hotkeys::HotkeyState::default());
             let errors = hotkeys::register_all(&handle, &settings.hotkeys);
             tray::build(&handle, &settings.hotkeys)?;
+            /* Build the capture overlays ahead of time so area capture opens instantly. */
+            let warm = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                capture::prewarm(&warm);
+            });
 
             let first_run = !settings.onboarded;
             app.manage(AppState {
@@ -158,6 +164,7 @@ pub fn run() {
             commands::capture,
             commands::open_image,
             commands::finish_area,
+            commands::overlay_pending,
             commands::cancel_area,
             commands::latest_capture,
             commands::save_image,

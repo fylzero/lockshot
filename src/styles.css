@@ -882,7 +882,7 @@ a {
   background: #000;
 }
 
-.overlay img {
+.overlay-image {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -944,7 +944,8 @@ a {
 
 .overlay-hint {
   position: absolute;
-  top: 2.5rem;
+  /* Bottom, not top: the overlay covers the menu bar and the notch. */
+  bottom: 3rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;

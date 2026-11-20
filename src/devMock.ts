@@ -35,7 +35,9 @@ function sampleImage() {
   for (let i = 0; i < 6; i++) g.fillRect(260, 340 + i * 60, 600 - (i % 3) * 120, 18);
   g.fillStyle = "#2f86d6";
   [180, 260, 140, 320, 230].forEach((h, i) => g.fillRect(940 + i * 80, 780 - h, 50, h));
-  return c.toDataURL("image/png");
+  /* The app fetches raw RGBA bytes, like the capture:// protocol serves. */
+  const raw = g.getImageData(0, 0, c.width, c.height).data;
+  return URL.createObjectURL(new Blob([raw]));
 }
 
 export function installMock() {

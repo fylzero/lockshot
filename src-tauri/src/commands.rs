@@ -6,7 +6,7 @@ use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::capture::{self, CaptureReady, Rect};
+use crate::capture::{self, CaptureReady, OverlayStart, Rect};
 use crate::export;
 use crate::hotkeys;
 use crate::platform::{self, PermissionStatus};
@@ -128,7 +128,7 @@ pub async fn capture(app: AppHandle, mode: String) -> Result<(), String> {
         if main.is_visible().unwrap_or(false) {
             let _ = main.hide();
             /* Give the compositor a moment to take the window off screen. */
-            std::thread::sleep(std::time::Duration::from_millis(250));
+            std::thread::sleep(std::time::Duration::from_millis(120));
         }
     }
     match mode.as_str() {
@@ -147,9 +147,15 @@ pub async fn open_image(app: AppHandle, path: String) -> Result<(), String> {
 pub fn finish_area(
     app: AppHandle,
     window: WebviewWindow,
+    session: String,
     rect: Option<Rect>,
 ) -> Result<(), String> {
-    capture::finish_area(&app, window.label(), rect)
+    capture::finish_area(&app, window.label(), &session, rect)
+}
+
+#[tauri::command]
+pub fn overlay_pending(app: AppHandle, window: WebviewWindow) -> Option<OverlayStart> {
+    capture::overlay_pending(&app, window.label())
 }
 
 #[tauri::command]

@@ -168,7 +168,18 @@ This starts Vite on `http://localhost:1440`, compiles the Rust backend, and open
 
 `bun run dev` on its own serves the UI at `http://localhost:1440` with a mocked backend and a sample capture, which is handy for working on the editor in a browser.
 
-When running `bun run tauri dev`, macOS may attribute Screen Recording permission to your terminal instead of Lockshot.
+#### Testing screen capture on macOS
+
+`bun run tauri dev` runs a bare executable, so macOS gives Screen Recording permission to the terminal that launched it, not to Lockshot. Either:
+
+- Add your terminal app under *System Settings › Privacy & Security › Screen & System Audio Recording* and restart it. Captures then work in `bun run tauri dev`.
+- Or build, sign with your Developer ID, and install the real app to `/Applications`. macOS remembers the permission by signer, so it survives rebuilds:
+
+  ```bash
+  bun run install:mac
+  ```
+
+  Add `-- --debug` for a faster debug build. It picks up the Developer ID certificate from your keychain and skips notarization, which only downloads need.
 
 ### Building a release
 

@@ -18,8 +18,10 @@ export const api = {
   validateHotkey: (accelerator: string) => invoke<void>("validate_hotkey", { accelerator }),
   capture: (mode: "area" | "screen") => invoke<void>("capture", { mode }),
   openImage: (path: string) => invoke<void>("open_image", { path }),
-  finishArea: (rect: { x: number; y: number; width: number; height: number } | null) =>
-    invoke<void>("finish_area", { rect }),
+  finishArea: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
+    invoke<void>("finish_area", { session, rect }),
+  overlayPending: () =>
+    invoke<{ session: string; index: number; width: number; height: number } | null>("overlay_pending"),
   cancelArea: () => invoke<void>("cancel_area"),
   latestCapture: () => invoke<CaptureReady | null>("latest_capture"),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),

@@ -7,6 +7,16 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "0.1.2",
+    date: "November 19, 2026",
+    notes: [
+      "Capture Area no longer quits Lockshot on macOS.",
+      "Captures show up in the editor again, and Capture Area's selection overlay appears, instead of an empty editor or nothing at all.",
+      "Capture Area opens almost instantly instead of after a few seconds. The overlay covers the whole display right away, and your first drag starts the selection.",
+      "The Drag to capture hint sits at the bottom of the screen, clear of the notch and menu bar.",
+    ],
+  },
+  {
     version: "0.1.1",
     date: "November 19, 2026",
     notes: [

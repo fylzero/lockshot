@@ -132,16 +132,23 @@ pub fn raise_overlay(window: &tauri::WebviewWindow) {
 
     /// NSScreenSaverWindowLevel
     const LEVEL: isize = 1000;
-    let Ok(ns_window) = window.ns_window() else {
-        return;
-    };
-    let ns_window = ns_window as *mut AnyObject;
-    if ns_window.is_null() {
-        return;
-    }
-    unsafe {
-        let _: () = msg_send![ns_window, setLevel: LEVEL];
-    }
+    /*
+     * Captures run on a worker thread, and AppKit aborts the app if a window
+     * is touched off the main thread, so hop over to it.
+     */
+    let target = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        let Ok(ns_window) = target.ns_window() else {
+            return;
+        };
+        let ns_window = ns_window as *mut AnyObject;
+        if ns_window.is_null() {
+            return;
+        }
+        unsafe {
+            let _: () = msg_send![ns_window, setLevel: LEVEL];
+        }
+    });
 }
 
 #[cfg(not(target_os = "macos"))]

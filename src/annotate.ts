@@ -333,10 +333,10 @@ export function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, source: C
 }
 
 /** Render the screenshot with every annotation, cropped, at full resolution. */
-export function renderFinal(source: HTMLImageElement, shapes: Shape[], crop: Rect | null) {
+export function renderFinal(source: ImageBitmap, shapes: Shape[], crop: Rect | null) {
   const full = document.createElement("canvas");
-  full.width = source.naturalWidth;
-  full.height = source.naturalHeight;
+  full.width = source.width;
+  full.height = source.height;
   const ctx = full.getContext("2d")!;
   ctx.drawImage(source, 0, 0);
   for (const shape of shapes) drawShape(ctx, shape, source);

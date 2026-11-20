@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
+import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api } from "./api";
+import { fetchPixels } from "./pixels";
 
 /*
- * One of these covers each monitor during an area capture, showing the frozen
- * screenshot of that monitor. Its window label is "overlay-<session>-<index>".
+ * One of these covers each display during an area capture, showing the frozen
+ * screenshot of that display. The window ("overlay-<index>") is made once,
+ * kept hidden between captures, and told about each new capture with an
+ * "overlay-start" event, so it can appear without loading a page first.
  */
-const win = getCurrentWindow();
-const match = /^overlay-(.+)-(\d+)$/.exec(win.label);
-const src = match ? convertFileSrc(`session/${match[1]}/${match[2]}`, "capture") : "";
+interface OverlayStart {
+  session: string;
+  index: number;
+  width: number;
+  height: number;
+}
 
+const win = getCurrentWindow();
+const canvas = ref<HTMLCanvasElement | null>(null);
+const session = ref("");
 const loaded = ref(false);
 const pointer = ref<{ x: number; y: number } | null>(null);
 const start = ref<{ x: number; y: number } | null>(null);
@@ -45,11 +54,39 @@ const labelStyle = computed(() => {
   };
 });
 
-async function onLoad(event: Event) {
-  naturalWidth.value = (event.target as HTMLImageElement).naturalWidth;
+/** Show a new capture: draw its frozen display, then appear. */
+async function begin(next: OverlayStart) {
+  const started = performance.now();
+  session.value = next.session;
+  loaded.value = false;
+  start.value = null;
+  pointer.value = null;
+  finishing.value = false;
+  try {
+    const pixels = await fetchPixels(`session/${next.session}/${next.index}`, next.width, next.height);
+    if (session.value !== next.session || !canvas.value) return;
+    canvas.value.width = next.width;
+    canvas.value.height = next.height;
+    canvas.value.getContext("2d")!.putImageData(pixels, 0, 0);
+  } catch {
+    if (session.value !== next.session) return;
+    finishing.value = true;
+    void emitTo("main", "capture-error", "Lockshot couldn't load the screen image for this capture. Please try again.");
+    void api.cancelArea();
+    return;
+  }
+  naturalWidth.value = next.width;
   loaded.value = true;
   await win.show();
-  /* Only the monitor under the pointer takes keyboard focus, for Esc. */
+  if (import.meta.env.DEV) {
+    /* Shows up in the tauri dev terminal, for checking speed and geometry. */
+    const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
+    console.info(
+      `[overlay ${win.label}] shown ${Math.round(performance.now() - started)} ms after the event;`,
+      `window ${size.width}x${size.height} at ${pos.x},${pos.y}, page ${window.innerWidth}x${window.innerHeight}`,
+    );
+  }
+  /* Only the display under the pointer takes keyboard focus, for Esc. */
   try {
     const [cursor, pos, size] = await Promise.all([cursorPosition(), win.outerPosition(), win.outerSize()]);
     const inside = cursor.x >= pos.x && cursor.y >= pos.y && cursor.x < pos.x + size.width && cursor.y < pos.y + size.height;
@@ -90,7 +127,7 @@ async function onPointerUp() {
   /* A click without a drag takes the whole screen. */
   const rect = s && s.w >= 4 && s.h >= 4 ? { x: s.x / W, y: s.y / H, width: s.w / W, height: s.h / H } : null;
   try {
-    await api.finishArea(rect);
+    await api.finishArea(session.value, rect);
   } catch {
     await api.cancelArea();
   }
@@ -100,11 +137,20 @@ function onKey(event: KeyboardEvent) {
   if (event.key === "Escape") cancel();
 }
 
-onMounted(() => {
+let unlisten: UnlistenFn | undefined;
+
+onMounted(async () => {
   window.addEventListener("keydown", onKey);
   window.addEventListener("contextmenu", (e) => e.preventDefault());
+  unlisten = await listen<OverlayStart>("overlay-start", (event) => void begin(event.payload));
+  /* A capture that started while this page was still loading. */
+  const pending = await api.overlayPending().catch(() => null);
+  if (pending && pending.session !== session.value) void begin(pending);
 });
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
+  unlisten?.();
+});
 </script>
 
 <template>
@@ -115,7 +161,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     @pointerup="onPointerUp"
     @pointerleave="!start && (pointer = null)"
   >
-    <img v-if="src" :src="src" alt="" draggable="false" @load="onLoad" />
+    <canvas ref="canvas" class="overlay-image" />
     <template v-if="loaded">
       <div v-if="!selection" class="overlay-shade" />
       <div
