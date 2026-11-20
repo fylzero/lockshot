@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useRouter } from "vue-router";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import Icon from "./components/Icon.vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import TabBar from "./components/TabBar.vue";
+import { useTabs } from "./tabs";
+import { isMac } from "./platform";
 import Modal from "./components/Modal.vue";
 import { useUpdater } from "./composables/useUpdater";
 import { api, errorMessage } from "./api";
 import {
   OPENABLE_EXTENSIONS,
-  current,
+  captures,
   dismissToast,
   loadSettings,
   openCapture,
@@ -23,6 +25,30 @@ import {
 import type { CaptureReady } from "./types";
 
 const router = useRouter();
+const route = useRoute();
+const EditorView = defineAsyncComponent(() => import("./views/EditorView.vue"));
+
+const { active: activeTab, close: closeTab } = useTabs(router, route);
+
+/**
+ * ⌘W / Ctrl+W: close the active tab, working back toward Home; on Home, hide
+ * the window (Lockshot keeps running in the menu bar / tray).
+ */
+function closeActiveTabOrWindow() {
+  if (activeTab.value !== "home") closeTab(activeTab.value);
+  else void api.hideMain();
+}
+
+/* macOS sends ⌘W through the menu; elsewhere the page sees Ctrl+W itself. */
+function onWindowKeydown(event: KeyboardEvent) {
+  if (isMac || !event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return;
+  if (event.key.toLowerCase() !== "w") return;
+  event.preventDefault();
+  closeActiveTabOrWindow();
+}
+
+/** The capture whose editor tab is showing, if any. */
+const activeCapture = computed(() => (route.name === "editor" ? String(route.params.id) : null));
 const unlisten: UnlistenFn[] = [];
 
 const OPENABLE = new RegExp(`\\.(${OPENABLE_EXTENSIONS.join("|")})$`, "i");
@@ -68,14 +94,16 @@ function onContextMenu(event: MouseEvent) {
 
 onMounted(async () => {
   window.addEventListener("contextmenu", onContextMenu);
+  window.addEventListener("keydown", onWindowKeydown);
   unlisten.push(
     await listen<string>("navigate", (event) => {
       void api.takePendingRoute();
       void router.push(event.payload);
     }),
+    /* Every capture or opened image gets a new editor tab. */
     await listen<CaptureReady>("capture-ready", (event) => {
-      openCapture(event.payload);
-      void router.push("/editor");
+      const doc = openCapture(event.payload);
+      void router.push(`/editor/${doc.id}`);
     }),
     /* Drop an image file anywhere on the window to open it in the editor. */
     await getCurrentWebview().onDragDropEvent((event) => {
@@ -85,6 +113,8 @@ onMounted(async () => {
       else if (event.payload.paths.length) showToast("Lockshot opens PNG, JPG, GIF, BMP, TIFF and HEIC images.", "error");
     }),
     await listen("check-for-updates", () => void checkForUpdatesNow()),
+    await listen("close-tab-or-window", () => closeActiveTabOrWindow()),
+    await listen("open-settings", () => void router.push("/settings/general")),
     await listen<string>("capture-error", (event) => {
       showToast(event.payload, "error");
     }),
@@ -95,7 +125,7 @@ onMounted(async () => {
     showToast(`Could not load settings: ${errorMessage(err)}`, "error");
   }
   /* A capture or route requested before this page finished loading. */
-  if (!current.value) {
+  if (!captures.value.length) {
     const latest = await api.latestCapture().catch(() => null);
     if (latest) openCapture(latest);
   }
@@ -107,6 +137,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("contextmenu", onContextMenu);
+  window.removeEventListener("keydown", onWindowKeydown);
   unlisten.forEach((fn) => fn());
 });
 </script>
@@ -116,7 +147,14 @@ onBeforeUnmount(() => {
     <TabBar />
 
     <main v-if="settings" class="content">
-      <RouterView />
+      <EditorView
+        v-for="capture in captures"
+        v-show="activeCapture === capture.id"
+        :key="capture.id"
+        :capture="capture"
+        :active="activeCapture === capture.id"
+      />
+      <RouterView v-if="!activeCapture" />
     </main>
 
     <footer class="status-bar">

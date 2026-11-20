@@ -2,6 +2,8 @@ mod capture;
 mod commands;
 mod export;
 mod hotkeys;
+#[cfg(target_os = "macos")]
+mod menu;
 mod platform;
 mod settings;
 mod tray;
@@ -87,7 +89,16 @@ pub fn run_action(app: &AppHandle, action: &str) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    /*
+     * macOS only: replace Tauri's default menu, whose ⌘W closes the window
+     * outright, with one where ⌘W closes the active tab first.
+     */
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(menu::build)
+        .on_menu_event(|app, event| menu::handle_event(app, event.id().as_ref()));
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             /* A second launch hands its arguments to the running copy. */
             match cli_action(&args) {
@@ -167,6 +178,7 @@ pub fn run() {
             commands::overlay_pending,
             commands::cancel_area,
             commands::latest_capture,
+            commands::release_capture,
             commands::save_image,
             commands::reveal_path,
             commands::reveal_settings_file,

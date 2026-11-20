@@ -7,6 +7,21 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "0.2.0",
+    date: "November 19, 2026",
+    notes: [
+      "Each screenshot, and each image you open, gets its own Editor tab named after its file. Every tab keeps its own annotations, undo history, crop and file name while you switch between them, and closing a tab frees its memory.",
+      "⌘W (Ctrl+W on Windows and Linux) closes the tab you're on, working back to Home, and only then closes the window. Lockshot keeps running in the menu bar.",
+      "On macOS, Lockshot has a full menu bar, with Settings (⌘,) and Check for Updates in the Lockshot menu.",
+      "Home walks through setup one step at a time: allow Screen Recording, pick your hotkeys, then find Lockshot in the menu bar. The capture buttons appear once setup is done, and the Screen Recording card comes back if access is ever turned off.",
+      "The Home tab is a home icon in the corner, and stays put while lots of screenshot tabs scroll past it. The tab bar no longer shows a scrollbar; scroll it with the wheel or a swipe, and the tab you're on is always in view.",
+      "Capture Area no longer dims the screen or draws guide lines that trailed the mouse. You get the normal crosshair pointer, and the selection is a solid white outline.",
+      "The editor sits on a plain neutral grey instead of a checkerboard, and its toolbar no longer changes height when Reset or Clear crop appears.",
+      "The export bar is a single row, with the file name, format, and buttons all the same height. Choose where Save puts files in Settings.",
+      "The hotkeys shown on Home's capture buttons are easier to read.",
+    ],
+  },
+  {
     version: "0.1.2",
     date: "November 19, 2026",
     notes: [

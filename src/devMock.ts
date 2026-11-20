@@ -4,6 +4,7 @@
  * the app: main.ts only imports it when the Tauri runtime is missing.
  */
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
 
 function sampleImage() {
   const c = document.createElement("canvas");
@@ -50,9 +51,11 @@ export function installMock() {
     jpegQuality: 90,
     copyOnCapture: false,
     theme: "system",
-    onboarded: true,
+    onboarded: !location.hash.includes("setup"),
+    setupStep: "",
   };
   mockWindows("main");
+  let opened = 0;
   mockIPC((cmd, args) => {
     const a = args as Record<string, any>;
     switch (cmd) {
@@ -78,6 +81,13 @@ export function installMock() {
         return { screen: location.hash.includes("denied") ? "denied" : "granted", os: "macos", wayland: false };
       case "save_image":
         return "/Users/demo/Pictures/Screenshot.png";
+      case "plugin:dialog|open":
+        return "/Users/demo/Pictures/Sample.png";
+      case "open_image":
+        /* Like a real capture: Rust announces it and the app opens a tab. */
+        opened += 1;
+        setTimeout(() => void emit("capture-ready", { id: `opened-${opened}`, width: 1600, height: 1000, name: `Sample-${opened}` }), 50);
+        return null;
       case "take_pending_route":
         return null;
       case "plugin:app|version":
@@ -85,6 +95,6 @@ export function installMock() {
       default:
         return null;
     }
-  });
+  }, { shouldMockEvents: true });
   (window as any).__TAURI_INTERNALS__.convertFileSrc = () => sample;
 }

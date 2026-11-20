@@ -13,8 +13,11 @@ export const env = reactive({
   hotkeyErrors: [] as string[],
 });
 
-/** The capture open in the editor, with the file name it was given. */
-export const current = ref<(CaptureReady & { name: string; takenAt: Date }) | null>(null);
+/** A capture open in an editor tab, with the file name it was given. */
+export type CaptureDoc = CaptureReady & { name: string; takenAt: Date };
+
+/** Every open capture, in tab order. Each gets its own Editor tab. */
+export const captures = ref<CaptureDoc[]>([]);
 
 export const toast = ref<{
   id: number;
@@ -73,18 +76,24 @@ watch(
   },
 );
 
-export function openCapture(ready: CaptureReady) {
+/** Add a capture as a new editor tab (or return the one already open). */
+export function openCapture(ready: CaptureReady): CaptureDoc {
+  const existing = captures.value.find((c) => c.id === ready.id);
+  if (existing) return existing;
   const takenAt = new Date();
-  current.value = {
+  const doc: CaptureDoc = {
     ...ready,
     takenAt,
     name: ready.name || formatFilename(settings.value?.filenameTemplate ?? "", takenAt, ready),
   };
+  captures.value.push(doc);
+  return doc;
 }
 
-/** Close the editor; its tab goes away until the next capture. */
-export function closeCapture() {
-  current.value = null;
+/** Close a capture's tab and let Rust free its pixels. */
+export function closeCapture(id: string) {
+  captures.value = captures.value.filter((c) => c.id !== id);
+  void api.releaseCapture(id).catch(() => undefined);
 }
 
 export const OPENABLE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "heic", "heif"];

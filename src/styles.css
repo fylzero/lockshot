@@ -309,10 +309,17 @@ a {
 
 .capture-keys {
   display: inline-flex;
-  gap: 0.2rem;
-  min-height: 1.4rem;
+  gap: 0.25rem;
+  min-height: 1.75rem;
   align-items: center;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+}
+
+/* Same size as the hotkey buttons in Settings, not the tiny inline kbd. */
+.capture-keys kbd {
+  min-width: 1.75em;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.95rem;
 }
 
 .capture-cards {
@@ -1295,4 +1302,72 @@ button.tab-tool.update:hover:not(:disabled) {
 .export-bar .file-badge {
   height: var(--export-row);
   width: calc(var(--export-row) * 0.833);
+}
+
+/* The editor toolbar keeps one height whether or not Reset and Clear crop
+   are showing: text buttons match the icon tools. */
+.toolbar {
+  --tool-height: 1.95rem;
+  min-height: calc(var(--tool-height) + 0.8rem + 1px);
+}
+
+.toolbar .tool,
+.toolbar button.ghost {
+  height: var(--tool-height);
+}
+
+.toolbar button.ghost {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.85rem;
+}
+
+/* The tab strip scrolls sideways when tabs overflow, but never shows a
+   scrollbar: with "always show scrollbars" on, one would sit across the tabs.
+   The wheel scrolls it, and the active tab is kept in view. */
+.tab-list {
+  scrollbar-width: none;
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* Home is an icon-only square in the corner, and stays put at the left
+   while the other tabs scroll under it. */
+.tab.pinned {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 37px;
+  min-width: 37px;
+  padding: 0;
+  justify-content: center;
+  background: var(--bg-deep);
+}
+
+.tab.pinned:hover {
+  background: var(--bg-hover);
+}
+
+.tab.pinned.active {
+  background: var(--bg);
+}
+
+/* Tabs scrolled into view land beside Home, not under it. */
+.tab-list {
+  scroll-padding-inline-start: 37px;
+}
+
+/* Setup steps on Home */
+.step-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.step-close {
+  align-self: flex-start;
+  padding: 0.25rem;
+  color: var(--muted);
 }

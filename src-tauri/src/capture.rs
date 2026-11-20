@@ -115,8 +115,11 @@ fn store(app: &AppHandle, image: RgbaImage, name: Option<String>) -> CaptureRead
         state.names.lock().unwrap().insert(id.clone(), name);
     }
     let mut images = state.images.lock().unwrap();
-    /* Only the latest few are ever reopened; screenshots are large. */
-    if images.len() >= 8 {
+    /*
+     * Each editor tab frees its capture when closed (release). This cap only
+     * guards against tabs that never say so; screenshots are large.
+     */
+    if images.len() >= 32 {
         let latest = state.latest.lock().unwrap().clone();
         images.retain(|key, _| Some(key) == latest.as_ref());
     }
@@ -128,7 +131,8 @@ fn store(app: &AppHandle, image: RgbaImage, name: Option<String>) -> CaptureRead
 /// Hand a finished capture to the editor window and bring it forward.
 fn deliver(app: &AppHandle, image: RgbaImage, name: Option<String>) {
     let ready = store(app, image, name);
-    crate::show_main(app, Some(&format!("/editor/{}", ready.id)));
+    /* The page opens a new editor tab for it when the event arrives. */
+    crate::show_main(app, None);
     let _ = app.emit_to("main", "capture-ready", ready);
 }
 
@@ -376,6 +380,17 @@ pub fn finish_area(
     };
     deliver(app, cropped, None);
     Ok(())
+}
+
+/// Forget a capture whose editor tab was closed.
+pub fn release(app: &AppHandle, id: &str) {
+    let state = app.state::<CaptureState>();
+    state.images.lock().unwrap().remove(id);
+    state.names.lock().unwrap().remove(id);
+    let mut latest = state.latest.lock().unwrap();
+    if latest.as_deref() == Some(id) {
+        *latest = None;
+    }
 }
 
 pub fn latest(app: &AppHandle) -> Option<CaptureReady> {

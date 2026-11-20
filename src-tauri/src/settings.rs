@@ -71,8 +71,11 @@ pub struct Settings {
     /// Put every capture on the clipboard as soon as it is taken.
     pub copy_on_capture: bool,
     pub theme: String,
-    /// The welcome guide has been dismissed.
+    /// Setup on Home is finished; until then the window opens at launch.
     pub onboarded: bool,
+    /// Which setup step Home shows: "permission", "hotkeys" or "tray".
+    /// Empty in settings saved before the steps existed.
+    pub setup_step: String,
 }
 
 impl Default for Settings {
@@ -86,6 +89,7 @@ impl Default for Settings {
             copy_on_capture: false,
             theme: "system".into(),
             onboarded: false,
+            setup_step: String::new(),
         }
     }
 }

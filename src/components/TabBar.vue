@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
@@ -11,6 +12,27 @@ const route = useRoute();
 const router = useRouter();
 const { tabs, active, activate, close } = useTabs(router, route);
 const { updateReady, availableVersion, showPrompt } = useUpdater();
+
+const tabList = ref<HTMLElement | null>(null);
+
+/* A vertical wheel or swipe scrolls the tabs sideways. */
+function onWheel(event: WheelEvent) {
+  const el = tabList.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+    el.scrollLeft += event.deltaY;
+    event.preventDefault();
+  }
+}
+
+/* Keep the active tab visible, so a new capture's tab never opens off screen. */
+watch(
+  () => [active.value, tabs.value.length],
+  async () => {
+    await nextTick();
+    tabList.value?.querySelector<HTMLElement>(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  },
+);
 
 const TAB_ICONS: Record<string, string> = { editor: "image", settings: "settings", changelog: "changelog" };
 
@@ -29,16 +51,17 @@ function hint(label: string, accelerator?: string) {
 
 <template>
   <div class="tab-bar" role="tablist" aria-label="Open views">
-    <div class="tab-list">
+    <div ref="tabList" class="tab-list" @wheel="onWheel">
       <div
         class="tab pinned"
         :class="{ active: active === 'home' }"
         role="tab"
         :aria-selected="active === 'home'"
+        title="Home"
+        aria-label="Home"
         @click="activate('home')"
       >
         <Icon name="home" class="tab-icon" />
-        <span class="tab-title">Home</span>
       </div>
       <div
         v-for="tab in tabs"
@@ -50,7 +73,7 @@ function hint(label: string, accelerator?: string) {
         @click="activate(tab.id)"
         @auxclick.middle="close(tab.id)"
       >
-        <Icon :name="TAB_ICONS[tab.id]" class="tab-icon" />
+        <Icon :name="TAB_ICONS[tab.kind]" class="tab-icon" />
         <span class="tab-title">{{ tab.title }}</span>
         <button class="tab-close" type="button" :aria-label="`Close ${tab.title}`" @click.stop="close(tab.id)">×</button>
       </div>

@@ -19,7 +19,13 @@ import {
   type TextShape,
   type Tool,
 } from "../annotate";
-import { current, settings, showToast } from "../store";
+import { settings, showToast, type CaptureDoc } from "../store";
+
+/*
+ * One editor per open capture. App.vue keeps every one alive and shows the
+ * active tab's, so annotations and undo history survive switching tabs.
+ */
+const props = defineProps<{ capture: CaptureDoc; active: boolean }>();
 import { errorMessage } from "../api";
 import { loadBitmap } from "../pixels";
 import { modKey } from "../platform";
@@ -85,17 +91,17 @@ function sizeFor(kind: "stroke" | "text" | "step") {
 /* ---- Loading ---- */
 
 watch(
-  () => current.value?.id,
+  () => props.capture.id,
   (id) => {
     reset();
     image.value?.close();
     image.value = null;
     loadError.value = "";
     if (!id) return;
-    const { width: w, height: h } = current.value!;
+    const { width: w, height: h } = props.capture;
     loadBitmap(`image/${id}`, w, h)
       .then(async (bitmap) => {
-        if (current.value?.id !== id) {
+        if (props.capture.id !== id) {
           bitmap.close();
           return;
         }
@@ -108,7 +114,7 @@ watch(
         if (settings.value?.copyOnCapture) void copy(true);
       })
       .catch(() => {
-        if (current.value?.id === id) loadError.value = "This capture is no longer available. Take a new one.";
+        if (props.capture.id === id) loadError.value = "This capture is no longer available. Take a new one.";
       });
   },
   { immediate: true },
@@ -168,7 +174,8 @@ function clearAll() {
 /* ---- Zoom ---- */
 
 function fit() {
-  if (!stage.value || !width.value) return;
+  /* A hidden tab's stage measures 0; it refits when it becomes visible. */
+  if (!stage.value || !width.value || !stage.value.clientWidth) return;
   const pad = 48;
   const availW = Math.max(50, stage.value.clientWidth - pad) * dpr;
   const availH = Math.max(50, stage.value.clientHeight - pad) * dpr;
@@ -517,6 +524,8 @@ const exportBar = ref<InstanceType<typeof ExportBar> | null>(null);
 /* ---- Keyboard ---- */
 
 function onKeyDown(event: KeyboardEvent) {
+  /* Every open editor listens; only the visible one acts. */
+  if (!props.active) return;
   const target = event.target as HTMLElement | null;
   if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
   if (!image.value) return;
@@ -566,6 +575,16 @@ watch(tool, (next) => {
   if (canvas.value) canvas.value.style.cursor = next === "select" ? "default" : next === "text" ? "text" : "crosshair";
 });
 
+watch(
+  () => props.active,
+  async (active) => {
+    if (!active) return;
+    await nextTick();
+    if (fitMode.value) fit();
+    draw();
+  },
+);
+
 onMounted(() => {
   window.addEventListener("keydown", onKeyDown);
   resizeObserver = new ResizeObserver(() => {
@@ -587,7 +606,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="current" class="editor">
+  <div class="editor">
     <div class="toolbar">
       <div class="tool-group">
         <button
@@ -702,6 +721,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <ExportBar ref="exportBar" :render="renderPng" :ready="!!image" @copy="copy()" />
+    <ExportBar ref="exportBar" :capture="capture" :render="renderPng" :ready="!!image" @copy="copy()" />
   </div>
 </template>

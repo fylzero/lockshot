@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { relaunch } from "@tauri-apps/plugin-process";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
@@ -7,6 +7,11 @@ import { showToast } from "../store";
 import type { PermissionStatus } from "../types";
 
 const status = ref<PermissionStatus | null>(null);
+const emit = defineEmits<{ status: [status: PermissionStatus] }>();
+/* Lets Home move past the permission step once macOS reports it allowed. */
+watch(status, (next) => {
+  if (next) emit("status", next);
+});
 const asked = ref(false);
 let poll: ReturnType<typeof setInterval> | undefined;
 

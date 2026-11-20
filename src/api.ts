@@ -24,6 +24,7 @@ export const api = {
     invoke<{ session: string; index: number; width: number; height: number } | null>("overlay_pending"),
   cancelArea: () => invoke<void>("cancel_area"),
   latestCapture: () => invoke<CaptureReady | null>("latest_capture"),
+  releaseCapture: (id: string) => invoke<void>("release_capture", { id }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   revealSettingsFile: () => invoke<void>("reveal_settings_file"),
   permissionStatus: () => invoke<PermissionStatus>("permission_status"),

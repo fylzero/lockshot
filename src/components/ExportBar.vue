@@ -3,12 +3,13 @@ import { computed, ref, watch } from "vue";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
-import { current, env, settings, showToast } from "../store";
+import { env, settings, showToast, type CaptureDoc } from "../store";
 import { ALL_FORMATS, FORMAT_INFO } from "../formats";
 import { fileManagerName, modKey } from "../platform";
 import type { ExportFormat } from "../types";
 
 const props = defineProps<{
+  capture: CaptureDoc;
   render: () => Promise<Uint8Array>;
   ready: boolean;
 }>();
@@ -19,7 +20,7 @@ const busy = ref(false);
 
 /* Every new capture starts from the default format in Settings. */
 watch(
-  () => current.value?.id,
+  () => props.capture.id,
   () => {
     format.value = settings.value?.format ?? "png";
   },
@@ -43,14 +44,14 @@ function savedToast(path: string) {
 }
 
 async function save() {
-  if (!props.ready || !current.value || busy.value) return;
+  if (!props.ready || busy.value) return;
   busy.value = true;
   try {
     const png = await props.render();
     const path = await api.saveImage(png, {
       format: format.value,
       dir: settings.value?.saveDir ?? "",
-      name: current.value.name,
+      name: props.capture.name,
     });
     savedToast(path);
   } catch (err) {
@@ -61,11 +62,11 @@ async function save() {
 }
 
 async function saveAs() {
-  if (!props.ready || !current.value || busy.value) return;
+  if (!props.ready || busy.value) return;
   const ext = format.value;
   const picked = await saveDialog({
     title: "Save screenshot",
-    defaultPath: `${folder.value}${separator.value}${current.value.name}.${ext}`,
+    defaultPath: `${folder.value}${separator.value}${props.capture.name}.${ext}`,
     filters: [
       { name: FORMAT_INFO[ext].label, extensions: ext === "jpg" ? ["jpg", "jpeg"] : ext === "tiff" ? ["tiff", "tif"] : [ext] },
       ...ALL_FORMATS.filter((f) => f !== ext && supported(f)).map((f) => ({ name: FORMAT_INFO[f].label, extensions: [f] })),
@@ -110,8 +111,7 @@ defineExpose({ save, saveAs });
     <div class="export-fields">
       <div class="export-name">
         <input
-          v-if="current"
-          v-model="current.name"
+          v-model="capture.name"
           type="text"
           spellcheck="false"
           aria-label="File name"

@@ -164,6 +164,11 @@ pub fn cancel_area(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn release_capture(app: AppHandle, id: String) {
+    capture::release(&app, &id);
+}
+
+#[tauri::command]
 pub fn latest_capture(app: AppHandle) -> Option<CaptureReady> {
     capture::latest(&app)
 }

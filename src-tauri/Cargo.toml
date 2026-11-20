@@ -1,6 +1,6 @@
 [package]
 name = "lockshot"
-version = "0.1.2"
+version = "0.2.0"
 description = "Screenshot capture and annotation for macOS, Windows, and Linux"
 authors = ["RazorKode LLC"]
 license = "MIT"

@@ -19,6 +19,8 @@ export interface Settings {
   copyOnCapture: boolean;
   theme: ThemePreference;
   onboarded: boolean;
+  /** "permission", "hotkeys" or "tray" while setup is in progress. */
+  setupStep: string;
 }
 
 export interface Bootstrap {
