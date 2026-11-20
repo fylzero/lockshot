@@ -43,7 +43,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCNjY5MzdFQzgyRjIzMEQKUldRTkl5L0lmcE5tT3lyYkZMbDJBQ3Jiem5vWitydzVRYWsxREZ3UGUxTmFIZ0c0cnlmK2dublYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUxNjAxQkVBRjZBMzAwMTMKUldRVEFLUDI2aHRnVVhmNFZTS2d5Tmw2Ull6UHBUcDk0bjNqaGpjYURCMnE5TkYxamlJMmJ1Z0wK",
       "endpoints": [
         "https://github.com/fylzero/lockshot/releases/latest/download/latest.json"
       ]

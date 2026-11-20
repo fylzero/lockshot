@@ -52,9 +52,10 @@ openssl base64 -A -in /path/to/certificate.p12 | pbcopy
 Paste it into the GitHub secret field. Keep certificate files and passwords out of
 the repository, issue comments, and build logs.
 
-Also add the updater signing secrets, `TAURI_SIGNING_PRIVATE_KEY` (the contents of
-the private key file) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Those sign the
-update archives the in-app updater checks against the public key in
+Also add the updater signing secret, `TAURI_SIGNING_PRIVATE_KEY`: the contents of
+`~/.tauri/lockshot.key`. Like Recon's and Shipyard's, the key has no password, so
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` isn't needed (the workflow passes it through
+empty). The key signs the update archives the in-app updater checks against the public key in
 `src-tauri/tauri.conf.json`; they serve a separate purpose from Apple's
 code-signing certificate. Keep the private key safe: without it, existing installs
 can't verify future updates.
