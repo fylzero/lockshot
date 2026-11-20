@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "0.2.1",
+    date: "November 20, 2026",
+    notes: [
+      "The Home tab shows the same Lockshot icon as the menu bar instead of a house, and is a little wider so it's easier to click.",
+    ],
+  },
+  {
     version: "0.2.0",
     date: "November 19, 2026",
     notes: [

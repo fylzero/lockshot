@@ -61,7 +61,16 @@ function hint(label: string, accelerator?: string) {
         aria-label="Home"
         @click="activate('home')"
       >
-        <Icon name="home" class="tab-icon" />
+        <!-- The menu bar mark (scripts/icons/tray.svg), drawn in currentColor. -->
+        <svg class="tab-icon brand" viewBox="0 0 64 64" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 22V12a4 4 0 0 1 4-4h10" />
+            <path d="M42 8h10a4 4 0 0 1 4 4v10" />
+            <path d="M56 42v10a4 4 0 0 1-4 4H42" />
+            <path d="M22 56H12a4 4 0 0 1-4-4V42" />
+          </g>
+          <circle cx="32" cy="32" r="7" fill="currentColor" />
+        </svg>
       </div>
       <div
         v-for="tab in tabs"

@@ -1333,15 +1333,15 @@ button.tab-tool.update:hover:not(:disabled) {
   display: none;
 }
 
-/* Home is an icon-only square in the corner, and stays put at the left
+/* Home is an icon-only tab in the corner, and stays put at the left
    while the other tabs scroll under it. */
 .tab.pinned {
   position: sticky;
   left: 0;
   z-index: 1;
-  width: 37px;
-  min-width: 37px;
-  padding: 0;
+  width: 42px;
+  min-width: 42px;
+  padding: 0 0 0 2px;
   justify-content: center;
   background: var(--bg-deep);
 }
@@ -1356,7 +1356,12 @@ button.tab-tool.update:hover:not(:disabled) {
 
 /* Tabs scrolled into view land beside Home, not under it. */
 .tab-list {
-  scroll-padding-inline-start: 37px;
+  scroll-padding-inline-start: 42px;
+}
+
+.tab.pinned .tab-icon.brand {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 /* Setup steps on Home */
