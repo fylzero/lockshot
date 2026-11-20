@@ -687,6 +687,24 @@ a {
 .file-badge svg {
   width: 100%;
   height: 100%;
+  pointer-events: none;
+}
+
+.file-badge.draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.12s ease;
+}
+
+.file-badge.draggable:hover {
+  transform: translateY(-1px) scale(1.05);
+}
+
+.file-badge.dragging {
+  cursor: grabbing;
+  opacity: 0.6;
 }
 
 .file-badge span {

@@ -180,6 +180,7 @@ pub fn run() {
             commands::latest_capture,
             commands::release_capture,
             commands::save_image,
+            commands::drag_image,
             commands::reveal_path,
             commands::reveal_settings_file,
             commands::settings_json,

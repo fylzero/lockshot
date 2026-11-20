@@ -38,22 +38,33 @@ export const api = {
   takePendingRoute: () => invoke<string | null>("take_pending_route"),
   hideMain: () => invoke<void>("hide_main"),
 
+  /** Write the final image to disk; resolves to the path written. */
+  saveImage(png: Uint8Array, options: SaveOptions) {
+    return invoke<string>("save_image", saveBody(png, options));
+  },
   /**
-   * Hand the final PNG to Rust as raw bytes: a little-endian u32 length,
-   * the JSON options, then the image.
+   * Start a native drag of the image as a file named `name.format`. Call it
+   * while the mouse button is still down.
    */
-  saveImage(
-    png: Uint8Array,
-    options: { format: ExportFormat; path?: string; dir?: string; name?: string },
-  ) {
-    const json = new TextEncoder().encode(JSON.stringify(options));
-    const body = new Uint8Array(4 + json.length + png.length);
-    new DataView(body.buffer).setUint32(0, json.length, true);
-    body.set(json, 4);
-    body.set(png, 4 + json.length);
-    return invoke<string>("save_image", body);
+  dragImage(png: Uint8Array, options: { format: ExportFormat; name: string }) {
+    return invoke<void>("drag_image", saveBody(png, options));
   },
 };
+
+type SaveOptions = { format: ExportFormat; path?: string; dir?: string; name?: string };
+
+/**
+ * Hand the final PNG to Rust as raw bytes: a little-endian u32 length,
+ * the JSON options, then the image.
+ */
+function saveBody(png: Uint8Array, options: SaveOptions) {
+  const json = new TextEncoder().encode(JSON.stringify(options));
+  const body = new Uint8Array(4 + json.length + png.length);
+  new DataView(body.buffer).setUint32(0, json.length, true);
+  body.set(json, 4);
+  body.set(png, 4 + json.length);
+  return body;
+}
 
 export function errorMessage(err: unknown) {
   if (typeof err === "string") return err;

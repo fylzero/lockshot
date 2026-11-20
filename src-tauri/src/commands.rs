@@ -190,12 +190,8 @@ struct SaveOptions {
  * that many bytes of JSON SaveOptions, then the PNG. Raw keeps a large
  * screenshot from being inflated into a JSON number array.
  */
-#[tauri::command]
-pub fn save_image(
-    app: AppHandle,
-    state: State<AppState>,
-    request: Request,
-) -> Result<String, String> {
+/// Split a raw save body into its options and the PNG after them.
+fn split_save_body(request: &Request) -> Result<(SaveOptions, Vec<u8>), String> {
     let InvokeBody::Raw(body) = request.body() else {
         return Err("Expected the image as raw bytes.".into());
     };
@@ -206,9 +202,19 @@ pub fn save_image(
     let json = body
         .get(4..4 + json_len)
         .ok_or("The save options are cut short.")?;
-    let png = &body[4 + json_len..];
     let options: SaveOptions = serde_json::from_slice(json)
         .map_err(|err| format!("Could not read the save options: {err}"))?;
+    Ok((options, body[4 + json_len..].to_vec()))
+}
+
+#[tauri::command]
+pub fn save_image(
+    app: AppHandle,
+    state: State<AppState>,
+    request: Request,
+) -> Result<String, String> {
+    let (options, png) = split_save_body(&request)?;
+    let png = png.as_slice();
 
     let settings = state.settings.lock().unwrap().clone();
     let ext = export::extension(&options.format);
@@ -225,6 +231,51 @@ pub fn save_image(
     };
     export::write(png, &options.format, settings.jpeg_quality, &path)?;
     Ok(path.display().to_string())
+}
+
+/**
+ * Drag the edited image out of the window as a real file, the way Skitch's
+ * drag handle works: the file is written to a private temporary folder under
+ * the export name and format, then handed to the OS as a native drag, so it
+ * can be dropped on the Desktop, a Finder or Explorer window, a browser
+ * upload field, a chat, and so on. Same raw body as `save_image`.
+ */
+#[tauri::command]
+pub async fn drag_image(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: Request<'_>,
+) -> Result<(), String> {
+    let (options, png) = split_save_body(&request)?;
+    let quality = state.settings.lock().unwrap().jpeg_quality;
+    let stem = export::sanitize_file_stem(options.name.as_deref().unwrap_or("Screenshot"));
+    let path = export::write_drag_file(&png, &options.format, quality, &stem)?;
+    let preview = export::drag_preview(&png)?;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let target = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let item = drag::DragItem::Files(vec![path]);
+            let icon = drag::Image::Raw(preview);
+            let result = (|| -> Result<(), String> {
+                #[cfg(target_os = "linux")]
+                let handle = target.gtk_window().map_err(|err| err.to_string())?;
+                #[cfg(target_os = "linux")]
+                let handle = &handle;
+                #[cfg(not(target_os = "linux"))]
+                let handle = &target;
+                drag::start_drag(handle, item, icon, |_, _| {}, drag::Options::default())
+                    .map_err(|err| err.to_string())
+            })();
+            let _ = tx.send(result);
+        })
+        .map_err(|err| err.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || rx.recv())
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|_| "The drag did not start.".to_string())?
+        .map_err(|err| format!("Could not start the drag: {err}"))
 }
 
 #[tauri::command]

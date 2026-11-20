@@ -91,6 +91,8 @@ export function installMock() {
         return { screen: location.hash.includes("denied") ? "denied" : "granted", os: "macos", wayland: false };
       case "save_image":
         return "/Users/demo/Pictures/Screenshot.png";
+      case "drag_image":
+        return null;
       case "plugin:dialog|open":
         return "/Users/demo/Pictures/Sample.png";
       case "open_image":

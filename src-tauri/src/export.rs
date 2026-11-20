@@ -81,6 +81,33 @@ pub fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
         .expect("an unused file name")
 }
 
+/// The folder that holds files being dragged out of the editor.
+pub fn drag_dir() -> PathBuf {
+    std::env::temp_dir().join("lockshot-drag")
+}
+
+/**
+ * Write the image for a drag-out as `stem.ext` in a fresh folder, so the
+ * dropped file keeps the exact export name. Earlier drags are cleared first;
+ * a drop target has read or copied its file by the time the next drag begins.
+ */
+pub fn write_drag_file(png: &[u8], format: &str, quality: u8, stem: &str) -> Result<PathBuf, String> {
+    let root = drag_dir();
+    let _ = fs::remove_dir_all(&root);
+    let path = root
+        .join(uuid::Uuid::new_v4().simple().to_string())
+        .join(format!("{stem}.{}", extension(format)));
+    write(png, format, quality, &path)?;
+    Ok(path)
+}
+
+/// A small PNG thumbnail of the image to show under the cursor while dragging.
+pub fn drag_preview(png: &[u8]) -> Result<Vec<u8>, String> {
+    let image = image::load_from_memory_with_format(png, ImageFormat::Png)
+        .map_err(|err| format!("Could not read the edited image: {err}"))?;
+    encode_with(&image.thumbnail(160, 160), ImageFormat::Png)
+}
+
 fn flatten(image: &RgbaImage) -> RgbImage {
     /* Formats without alpha get the transparent bits on white. */
     RgbImage::from_fn(image.width(), image.height(), |x, y| {
@@ -373,6 +400,16 @@ mod tests {
         }
         assert!(read_image(&dir.join("missing.png")).is_err());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn drag_files_keep_the_export_name() {
+        let png = sample_png();
+        let path = write_drag_file(&png, "jpg", 90, "My shot").unwrap();
+        assert_eq!(path.file_name().unwrap(), "My shot.jpg");
+        assert!(path.starts_with(drag_dir()));
+        let preview = drag_preview(&png).unwrap();
+        assert!(image::load_from_memory(&preview).is_ok());
     }
 
     #[test]

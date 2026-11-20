@@ -108,6 +108,8 @@ onMounted(async () => {
     /* Drop an image file anywhere on the window to open it in the editor. */
     await getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type !== "drop") return;
+      /* A drag-out from the export bar landing back on Lockshot. */
+      if (event.payload.paths.some((p) => /[\\/]lockshot-drag[\\/]/.test(p))) return;
       const file = event.payload.paths.find((p) => OPENABLE.test(p));
       if (file) void api.openImage(file).catch((err) => showToast(errorMessage(err), "error"));
       else if (event.payload.paths.length) showToast("Lockshot opens PNG, JPG, GIF, BMP, TIFF and HEIC images.", "error");

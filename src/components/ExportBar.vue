@@ -93,12 +93,68 @@ async function saveAs() {
   }
 }
 
+/* ---- Drag the badge out as a file (like Skitch's drag handle) ---- */
+
+const DRAG_THRESHOLD = 4;
+let press: { x: number; y: number; png: Promise<Uint8Array> } | null = null;
+const dragging = ref(false);
+
+function onBadgeDown(event: PointerEvent) {
+  if (event.button !== 0 || !props.ready || busy.value) return;
+  event.preventDefault();
+  /* Start rendering now so the drag can begin the moment the mouse moves. */
+  const png = props.render();
+  png.catch(() => {});
+  press = { x: event.clientX, y: event.clientY, png };
+  window.addEventListener("pointermove", onBadgeMove);
+  window.addEventListener("pointerup", endPress);
+  window.addEventListener("blur", endPress);
+}
+
+function endPress() {
+  press = null;
+  window.removeEventListener("pointermove", onBadgeMove);
+  window.removeEventListener("pointerup", endPress);
+  window.removeEventListener("blur", endPress);
+}
+
+async function onBadgeMove(event: PointerEvent) {
+  if (!press) return;
+  if (!(event.buttons & 1)) return endPress();
+  if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
+  const { png } = press;
+  endPress();
+  dragging.value = true;
+  try {
+    const bytes = await png;
+    await api.dragImage(bytes, { format: format.value, name: props.capture.name });
+  } catch (err) {
+    showToast(errorMessage(err), "error");
+  } finally {
+    dragging.value = false;
+  }
+}
+
+const badgeTitle = computed(() =>
+  props.ready
+    ? `Drag to drop ${props.capture.name}.${format.value} anywhere: the Desktop, a folder, a browser, a chat…`
+    : info.value.note,
+);
+
 defineExpose({ save, saveAs });
 </script>
 
 <template>
   <div class="export-bar">
-    <div class="file-badge" :title="info.note">
+    <div
+      class="file-badge"
+      :class="{ draggable: ready, dragging }"
+      :title="badgeTitle"
+      role="button"
+      :aria-label="`Drag out as ${capture.name}.${format}`"
+      @pointerdown="onBadgeDown"
+      @dragstart.prevent
+    >
       <svg viewBox="0 0 40 48" aria-hidden="true">
         <path d="M6 2h20l10 10v32a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5" />
         <path d="M26 2v8a2 2 0 0 0 2 2h8" fill="none" stroke="var(--border)" stroke-width="1.5" />
