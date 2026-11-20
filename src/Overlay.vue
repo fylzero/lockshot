@@ -163,16 +163,11 @@ onBeforeUnmount(() => {
   >
     <canvas ref="canvas" class="overlay-image" />
     <template v-if="loaded">
-      <div v-if="!selection" class="overlay-shade" />
       <div
         v-if="selection"
         class="overlay-selection"
         :style="{ left: `${selection.x}px`, top: `${selection.y}px`, width: `${selection.w}px`, height: `${selection.h}px` }"
       />
-      <template v-if="pointer && !selection">
-        <div class="overlay-crosshair-x" :style="{ top: `${pointer.y}px` }" />
-        <div class="overlay-crosshair-y" :style="{ left: `${pointer.x}px` }" />
-      </template>
       <div v-if="selection && sizeLabel" class="overlay-size" :style="labelStyle">{{ sizeLabel }}</div>
       <div v-if="!start" class="overlay-hint">
         <span>Drag to capture</span>

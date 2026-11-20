@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
-import { current, env, saveSettingsSoon, settings, showToast } from "../store";
+import { current, env, settings, showToast } from "../store";
 import { ALL_FORMATS, FORMAT_INFO } from "../formats";
 import { fileManagerName, modKey } from "../platform";
 import type { ExportFormat } from "../types";
@@ -26,19 +26,12 @@ watch(
 );
 
 const info = computed(() => FORMAT_INFO[format.value]);
+/** Where Save writes; change it in Settings › General. */
 const folder = computed(() => settings.value?.saveDir || env.defaultSaveDir);
 const separator = computed(() => (env.os === "windows" ? "\\" : "/"));
 
 function supported(f: ExportFormat) {
   return env.formats.includes(f);
-}
-
-async function chooseFolder() {
-  const picked = await open({ directory: true, defaultPath: folder.value, title: "Save screenshots to" });
-  if (typeof picked === "string" && settings.value) {
-    settings.value.saveDir = picked;
-    saveSettingsSoon();
-  }
 }
 
 function savedToast(path: string) {
@@ -129,11 +122,6 @@ defineExpose({ save, saveAs });
             .{{ f }}{{ supported(f) ? "" : " (unavailable)" }}
           </option>
         </select>
-      </div>
-      <div class="export-meta">
-        <Icon name="folder" />
-        <span class="path" :title="folder">{{ folder }}</span>
-        <button class="ghost" @click="chooseFolder">Change…</button>
       </div>
     </div>
 
