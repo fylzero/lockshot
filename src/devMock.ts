@@ -50,6 +50,7 @@ export function installMock() {
     filenameTemplate: "Screenshot-{date}-{time}",
     jpegQuality: 90,
     copyOnCapture: false,
+    launchAtLogin: true,
     theme: "system",
     onboarded: !location.hash.includes("setup"),
     setupStep: "",

@@ -6,6 +6,7 @@ use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::autostart;
 use crate::capture::{self, CaptureReady, OverlayStart, Rect};
 use crate::export;
 use crate::hotkeys;
@@ -60,6 +61,9 @@ pub fn update_settings(
         next.format = "png".into();
     }
     next.jpeg_quality = next.jpeg_quality.clamp(1, 100);
+    if next.launch_at_login != current.launch_at_login {
+        autostart::apply(&app, next.launch_at_login)?;
+    }
     settings::save(&app, &next)?;
     *current = next.clone();
     Ok(next)
@@ -326,6 +330,13 @@ pub fn apply_settings_json(
     if let Err(err) = settings::save(&app, &next) {
         let _ = hotkeys::replace_all(&app, &next.hotkeys, &current.hotkeys);
         return Err(err);
+    }
+    if next.launch_at_login != current.launch_at_login {
+        if let Err(err) = autostart::apply(&app, next.launch_at_login) {
+            let _ = hotkeys::replace_all(&app, &next.hotkeys, &current.hotkeys);
+            let _ = settings::save(&app, &current);
+            return Err(err);
+        }
     }
     *current = next.clone();
     if hotkeys_changed {

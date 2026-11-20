@@ -279,6 +279,16 @@ const EDITOR_KEYS = [
         <div class="card">
           <div class="row">
             <div class="row-label">
+              Launch at login
+              <small>Start Lockshot in the {{ env.os === 'macos' ? 'menu bar' : 'tray' }} so the hotkeys work right away.</small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.launchAtLogin" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-label">
               Copy every capture to the clipboard
               <small>Paste straight into chat or docs without saving.</small>
             </div>

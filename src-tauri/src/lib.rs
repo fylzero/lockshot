@@ -1,3 +1,4 @@
+mod autostart;
 mod capture;
 mod commands;
 mod export;
@@ -111,6 +112,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(autostart::plugin())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(hotkeys::handle)
@@ -130,6 +132,9 @@ pub fn run() {
             handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
 
             let settings = settings::load(&handle);
+            if let Err(err) = autostart::apply(&handle, settings.launch_at_login) {
+                eprintln!("{err}");
+            }
             app.manage(capture::CaptureState::default());
             app.manage(hotkeys::HotkeyState::default());
             let errors = hotkeys::register_all(&handle, &settings.hotkeys);

@@ -10,6 +10,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     version: "0.3.0",
     date: "November 20, 2026",
     notes: [
+      "Lockshot starts at login, so the hotkeys work as soon as you sign in. Turn it off under Settings → General → Launch at login.",
       "Drag the file icon in the export bar out of the window to drop the image as a real file, named and formatted as set in the export bar. Drop it on the Desktop, in a folder, on a browser upload, in Jira, a chat, or any app that takes files.",
       "The export bar is tidier: the file name field is shorter, Copy, Save As… and Save sit right beside it, and the draggable file icon moves to the right end.",
       "The Home tab shows the same Lockshot icon as the menu bar instead of a house, and is a little wider so it's easier to click.",

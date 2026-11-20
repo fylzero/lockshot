@@ -17,6 +17,7 @@ export interface Settings {
   filenameTemplate: string;
   jpegQuality: number;
   copyOnCapture: boolean;
+  launchAtLogin: boolean;
   theme: ThemePreference;
   onboarded: boolean;
   /** "permission", "hotkeys" or "tray" while setup is in progress. */
