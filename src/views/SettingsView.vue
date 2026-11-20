@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { getVersion } from "@tauri-apps/api/app";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import Icon from "../components/Icon.vue";
 import HotkeyRecorder from "../components/HotkeyRecorder.vue";
 import JsonEditor from "../components/JsonEditor.vue";
@@ -25,18 +23,16 @@ const SECTIONS = [
   { id: "hotkeys", label: "Hotkeys", icon: "keyboard" },
   { id: "permissions", label: "Permissions", icon: "shield" },
   { id: "json", label: "JSON", icon: "document" },
-  { id: "about", label: "About", icon: "info" },
 ];
 
 const route = useRoute();
 const router = useRouter();
-const section = computed(() => (route.params.section as string) || "general");
-const version = ref("");
-const hotkeyError = ref("");
-
-onMounted(async () => {
-  version.value = await getVersion().catch(() => "");
+/* Unknown sections (like the old About page) fall back to General. */
+const section = computed(() => {
+  const id = route.params.section as string;
+  return SECTIONS.some((s) => s.id === id) ? id : "general";
 });
+const hotkeyError = ref("");
 
 const preview = computed(() =>
   formatFilename(settings.value?.filenameTemplate ?? DEFAULT_TEMPLATE, new Date(), { width: 1440, height: 900 }),
@@ -477,7 +473,7 @@ const EDITOR_KEYS = [
       </template>
 
       <!-- JSON -->
-      <template v-else-if="section === 'json'">
+      <template v-else>
         <div class="json-head">
           <div>
             <h2>JSON</h2>
@@ -500,20 +496,6 @@ const EDITOR_KEYS = [
         <div class="json-wrap" @keydown="onJsonKeydown">
           <button class="json-copy" @click="copyJson"><Icon name="copy" /> Copy</button>
           <JsonEditor v-model="json" :error-line="jsonErrorLine" />
-        </div>
-      </template>
-
-      <!-- About -->
-      <template v-else>
-        <h2>About</h2>
-        <p class="muted">Lockshot {{ version }} · Screenshot capture and annotation for macOS, Windows, and Linux.</p>
-        <div class="card">
-          <div class="row">
-            <div class="row-label">Source code and issues</div>
-            <div class="row-control">
-              <button @click="openUrl('https://github.com/fylzero/lockshot')"><Icon name="external" /> GitHub</button>
-            </div>
-          </div>
         </div>
       </template>
     </div>

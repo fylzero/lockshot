@@ -341,6 +341,24 @@ function paint() {
     ctx.strokeStyle = "#118777";
     ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
     ctx.restore();
+    const corner = resizeCorner(selected);
+    if (corner) {
+      /* Same look as the text box's resize dot. */
+      const r = HANDLE_RADIUS / cssScale.value;
+      ctx.save();
+      ctx.shadowColor = "rgb(0 0 0 / 0.45)";
+      ctx.shadowBlur = 4 / cssScale.value;
+      ctx.shadowOffsetY = 1 / cssScale.value;
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#118777";
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = 2 / cssScale.value;
+      ctx.strokeStyle = "#fff";
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   const shownCrop = tool.value === "crop" ? pendingCrop.value : null;
@@ -395,6 +413,25 @@ function insideRect(r: Rect | null, p: { x: number; y: number }) {
   return !!r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 }
 
+/* ---- Redact resize ---- */
+
+/** Radius of the corner dot, in CSS pixels. */
+const HANDLE_RADIUS = 6;
+
+/** The bottom-right corner of a redact box, where its resize dot sits. */
+function resizeCorner(shape: Shape | null) {
+  if (shape?.kind !== "blur") return null;
+  const r = normalize(shape.x1, shape.y1, shape.x2, shape.y2);
+  return { x: r.x + r.w, y: r.y + r.h };
+}
+
+/** Whether `p` is on the selected redact box's resize dot. */
+function onResizeCorner(p: { x: number; y: number }) {
+  if (editing.value || tool.value === "crop") return false;
+  const c = resizeCorner(selectedShape.value);
+  return !!c && Math.hypot(p.x - c.x, p.y - c.y) * cssScale.value <= HANDLE_RADIUS + 4;
+}
+
 function toolCursor() {
   return tool.value === "text" ? "text" : "crosshair";
 }
@@ -406,6 +443,8 @@ let drag: {
   original?: Shape;
   /** Set while the Crop tool is drawing or moving the pending crop. */
   crop?: { mode: "draw" | "move"; before: Rect | null };
+  /** Set while the corner dot resizes a redact box; the top-left corner stays put. */
+  corner?: { x: number; y: number };
 } | null = null;
 
 function onPointerDown(event: PointerEvent) {
@@ -430,6 +469,13 @@ function onPointerDown(event: PointerEvent) {
       pendingCrop.value = { x: c.x, y: c.y, w: 0, h: 0 };
       drag = { start: p, moved: false, crop: { mode: "draw", before } };
     }
+    return;
+  }
+
+  const selected = selectedShape.value;
+  if (selected?.kind === "blur" && onResizeCorner(p)) {
+    const r = normalize(selected.x1, selected.y1, selected.x2, selected.y2);
+    drag = { start: p, moved: false, original: selected, corner: { x: r.x, y: r.y } };
     return;
   }
 
@@ -480,7 +526,7 @@ function onPointerMove(event: PointerEvent) {
     if (canvas.value && image.value) {
       const p = toImage(event);
       const grab = tool.value === "crop" ? insideRect(pendingCrop.value, p) : !!topShapeAt(p.x, p.y);
-      canvas.value.style.cursor = grab ? "move" : toolCursor();
+      canvas.value.style.cursor = onResizeCorner(p) ? "nwse-resize" : grab ? "move" : toolCursor();
     }
     return;
   }
@@ -500,6 +546,25 @@ function onPointerMove(event: PointerEvent) {
       const s = clampToImage(drag.start);
       pendingCrop.value = normalize(s.x, s.y, c.x, c.y);
     }
+    return;
+  }
+  if (drag.corner && drag.original?.kind === "blur") {
+    if (!drag.moved) return;
+    const a = drag.corner;
+    let dx = p.x - a.x;
+    let dy = p.y - a.y;
+    /* Shift keeps the box square, as when drawing it. */
+    if (event.shiftKey) {
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = Math.sign(dx || 1) * side;
+      dy = Math.sign(dy || 1) * side;
+    }
+    /* Never let it shrink past a few screen pixels, or it would vanish. */
+    const min = 4 / cssScale.value;
+    if (Math.abs(dx) < min) dx = Math.sign(dx || 1) * min;
+    if (Math.abs(dy) < min) dy = Math.sign(dy || 1) * min;
+    const resized = { ...drag.original, x1: a.x, y1: a.y, x2: a.x + dx, y2: a.y + dy };
+    shapes.value = shapes.value.map((s) => (s.id === resized.id ? resized : s));
     return;
   }
   if (drag.original) {
@@ -533,7 +598,7 @@ function onPointerMove(event: PointerEvent) {
 
 function onPointerUp() {
   if (!drag) return;
-  const { moved, original, crop: cropDrag } = drag;
+  const { moved, original, crop: cropDrag, corner } = drag;
   drag = null;
 
   if (cropDrag) {
@@ -551,7 +616,7 @@ function onPointerUp() {
       const now = shapes.value;
       shapes.value = now.map((s) => (s.id === original.id ? original : s));
       commit(now);
-    } else if (tool.value === "text" && original.kind === "text") {
+    } else if (!corner && tool.value === "text" && original.kind === "text") {
       startText(original);
     }
     return;

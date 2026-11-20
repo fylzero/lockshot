@@ -216,12 +216,12 @@ a {
 
 .toast-layer {
   position: fixed;
-  right: 1rem;
-  bottom: calc(1.55rem + 3.4rem);
+  left: 0.75rem;
+  bottom: calc(1.55rem + 0.6rem);
   z-index: 60;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 0.4rem;
   pointer-events: none;
 }
@@ -231,7 +231,7 @@ a {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  max-width: 30rem;
+  max-width: min(30rem, calc(100vw - 1.5rem));
   padding: 0.55rem 0.7rem 0.55rem 0.85rem;
   border: 1px solid rgb(60 200 130 / 0.45);
   border-radius: 10px;
@@ -245,11 +245,40 @@ a {
   background: linear-gradient(180deg, rgb(140 40 52 / 0.95), rgb(104 28 38 / 0.97));
 }
 
-.toast button {
+.toast-action {
   color: #fff;
   border-color: rgb(255 255 255 / 0.35);
   background: rgb(255 255 255 / 0.08);
   padding: 0.15rem 0.5rem;
+}
+
+.toast-close {
+  appearance: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.toast-close:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.14);
+  opacity: 1;
+}
+
+.toast-close svg {
+  display: block;
+  width: 0.8rem;
+  height: 0.8rem;
 }
 
 .toast-enter-active,

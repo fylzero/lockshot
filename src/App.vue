@@ -4,7 +4,6 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 
 import { useRoute, useRouter } from "vue-router";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import Icon from "./components/Icon.vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import TabBar from "./components/TabBar.vue";
 import { useTabs } from "./tabs";
@@ -199,8 +198,16 @@ onBeforeUnmount(() => {
       <Transition name="toast">
         <div v-if="toast" :key="toast.id" class="toast" :class="{ error: toast.kind === 'error' }">
           <span>{{ toast.message }}</span>
-          <button v-if="toast.action" @click="toast.action.run(); dismissToast()">{{ toast.action.label }}</button>
-          <button aria-label="Dismiss" @click="dismissToast"><Icon name="close" /></button>
+          <button v-if="toast.action" class="toast-action" type="button" @click="toast.action.run(); dismissToast()">
+            {{ toast.action.label }}
+          </button>
+          <button class="toast-close" type="button" aria-label="Dismiss" @click="dismissToast">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path
+                d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+              />
+            </svg>
+          </button>
         </div>
       </Transition>
     </div>
