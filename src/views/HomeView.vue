@@ -85,8 +85,8 @@ async function setHotkey(action: HotkeyAction, accelerator: string) {
         <div class="welcome-step">
           <span class="step-num">1</span>
           <div style="flex: 1">
-            <h3>Let Lockshot see your screen</h3>
-            <PermissionCard @status="onPermission" />
+            <h3>Allow Screen Recording</h3>
+            <PermissionCard embedded @status="onPermission" />
           </div>
         </div>
       </div>
@@ -144,7 +144,7 @@ async function setHotkey(action: HotkeyAction, accelerator: string) {
           <div class="welcome-step">
             <div style="flex: 1">
               <h3>Screen Recording is turned off</h3>
-              <PermissionCard @status="onPermission" />
+              <PermissionCard embedded @status="onPermission" />
             </div>
           </div>
         </div>

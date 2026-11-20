@@ -778,6 +778,25 @@ a {
   margin-top: 0.3rem;
 }
 
+.permission-steps .steps {
+  margin-top: 0.6rem;
+  line-height: 1.45;
+}
+
+button.link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.link:hover {
+  text-decoration: underline;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

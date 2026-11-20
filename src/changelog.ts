@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 20, 2026",
     notes: [
       "The Home tab shows the same Lockshot icon as the menu bar instead of a house, and is a little wider so it's easier to click.",
+      "Setup's Screen Recording step is a single, roomier card. Allow access and Relaunch Lockshot sit side by side, and Open System Settings is a link in the steps.",
     ],
   },
   {
