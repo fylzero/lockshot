@@ -18,6 +18,8 @@ export interface Settings {
   jpegQuality: number;
   copyOnCapture: boolean;
   launchAtLogin: boolean;
+  /** macOS: Cmd+Q hides the window and leaves Lockshot in the menu bar. */
+  keepRunningInBackground: boolean;
   theme: ThemePreference;
   onboarded: boolean;
   /** "permission", "hotkeys" or "tray" while setup is in progress. */

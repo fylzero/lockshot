@@ -297,6 +297,16 @@ const EDITOR_KEYS = [
               <span />
             </label>
           </div>
+          <div v-if="env.os === 'macos'" class="row">
+            <div class="row-label">
+              Keep running in the background
+              <small>⌘Q closes the window and leaves Lockshot in the menu bar so the hotkeys keep working. Quit from the menu bar icon to stop it.</small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.keepRunningInBackground" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
           <div class="row">
             <div class="row-label">
               Copy every capture to the clipboard

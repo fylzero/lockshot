@@ -13,6 +13,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Annotations are the same size on every screenshot. A size looks the same at 1:1 zoom whether the capture is a small area or a full Retina screen, instead of growing with the image.",
       "The back end of an arrow is rounded, like the Line tool.",
       "The editor remembers your tool, shape, color, size and Redact style after you quit and reopen Lockshot.",
+      "New setting on macOS: Keep running in the background. With it on (the default), ⌘Q closes the window and leaves Lockshot in the menu bar so your hotkeys keep working. Quit Lockshot from the menu bar icon to stop it.",
     ],
   },
   {

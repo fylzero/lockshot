@@ -72,6 +72,9 @@ pub struct Settings {
     pub copy_on_capture: bool,
     /// Start Lockshot in the tray when the user logs in.
     pub launch_at_login: bool,
+    /// macOS: Cmd+Q closes the window and leaves Lockshot in the menu bar,
+    /// so the hotkeys keep working. Quit from the menu bar icon still quits.
+    pub keep_running_in_background: bool,
     pub theme: String,
     /// Setup on Home is finished; until then the window opens at launch.
     pub onboarded: bool,
@@ -90,6 +93,7 @@ impl Default for Settings {
             jpeg_quality: 90,
             copy_on_capture: false,
             launch_at_login: true,
+            keep_running_in_background: true,
             theme: "system".into(),
             onboarded: false,
             setup_step: String::new(),
@@ -257,6 +261,7 @@ mod tests {
         assert_eq!(parsed.hotkeys.screen, Hotkeys::default().screen);
         assert_eq!(parsed.jpeg_quality, 90);
         assert!(parsed.launch_at_login);
+        assert!(parsed.keep_running_in_background);
     }
 
     #[test]
@@ -287,6 +292,7 @@ mod tests {
         assert!(from_json(r#"{ "setupStep": "later" }"#).is_err());
         assert!(from_json(r#"{ "copyOnCapture": "yes" }"#).is_err());
         assert!(from_json(r#"{ "launchAtLogin": 1 }"#).is_err());
+        assert!(from_json(r#"{ "keepRunningInBackground": "no" }"#).is_err());
         assert!(from_json("[]").is_err());
     }
 }

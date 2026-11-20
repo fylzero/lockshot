@@ -11,9 +11,16 @@
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use crate::commands::AppState;
+
 pub const CLOSE_TAB_OR_WINDOW_ID: &str = "close-tab-or-window";
 pub const OPEN_SETTINGS_ID: &str = "open-settings";
 pub const CHECK_FOR_UPDATES_ID: &str = "check-for-updates";
+/*
+ * Not "quit": Tauri passes every menu event to the tray's handler too, and
+ * the tray's "quit" item exits outright.
+ */
+pub const QUIT_ID: &str = "app-quit";
 
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = app.package_info();
@@ -42,6 +49,18 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         true,
         Some("CmdOrCtrl+,"),
     )?;
+    /*
+     * Not the predefined Quit: that sends terminate: straight to NSApp, which
+     * ends the process before Tauri can stop it. This one lets "Keep running
+     * in the background" turn ⌘Q into hiding the window instead.
+     */
+    let quit = MenuItem::with_id(
+        app,
+        QUIT_ID,
+        format!("Quit {}", pkg_info.name),
+        true,
+        Some("CmdOrCtrl+Q"),
+    )?;
     let check_updates = MenuItem::with_id(
         app,
         CHECK_FOR_UPDATES_ID,
@@ -68,7 +87,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     &PredefinedMenuItem::hide(app, None)?,
                     &PredefinedMenuItem::hide_others(app, None)?,
                     &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::quit(app, None)?,
+                    &quit,
                 ],
             )?,
             &Submenu::with_items(app, "File", true, &[&close])?,
@@ -101,7 +120,21 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     )
 }
 
-pub fn handle_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
+pub fn handle_event(app: &AppHandle, id: &str) {
+    if id == QUIT_ID {
+        let keep_running = app
+            .state::<AppState>()
+            .settings
+            .lock()
+            .map(|settings| settings.keep_running_in_background)
+            .unwrap_or(false);
+        if keep_running {
+            crate::hide_main(app);
+        } else {
+            app.exit(0);
+        }
+        return;
+    }
     let Some(window) = app.get_webview_window("main") else {
         return;
     };

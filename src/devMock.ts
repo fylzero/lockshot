@@ -60,6 +60,7 @@ export function installMock() {
     jpegQuality: 90,
     copyOnCapture: false,
     launchAtLogin: true,
+    keepRunningInBackground: true,
     theme: "system",
     onboarded: !location.hash.includes("setup"),
     setupStep: "",
