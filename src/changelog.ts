@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 20, 2026",
     notes: [
       "Drag the file icon in the export bar out of the window to drop the image as a real file, named and formatted as set in the export bar. Drop it on the Desktop, in a folder, on a browser upload, in Jira, a chat, or any app that takes files.",
+      "The export bar is tidier: the file name field is shorter, Copy, Save As… and Save sit right beside it, and the draggable file icon moves to the right end.",
       "The Home tab shows the same Lockshot icon as the menu bar instead of a house, and is a little wider so it's easier to click.",
       "Setup's Screen Recording step is a single, roomier card. Allow access and Relaunch Lockshot sit side by side, and Open System Settings is a link in the steps.",
       "Settings has a JSON page for editing settings.json directly, with line numbers and highlighting. Save checks everything first and points to the line with a problem. Import loads a settings file to look over before saving, Export writes your settings to a file, and Reveal shows where the file lives.",

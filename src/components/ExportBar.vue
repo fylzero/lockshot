@@ -146,24 +146,6 @@ defineExpose({ save, saveAs });
 
 <template>
   <div class="export-bar">
-    <div
-      class="file-badge"
-      :class="{ draggable: ready, dragging }"
-      :title="badgeTitle"
-      role="button"
-      :aria-label="`Drag out as ${capture.name}.${format}`"
-      @pointerdown="onBadgeDown"
-      @dragstart.prevent
-    >
-      <svg viewBox="0 0 40 48" aria-hidden="true">
-        <path d="M6 2h20l10 10v32a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5" />
-        <path d="M26 2v8a2 2 0 0 0 2 2h8" fill="none" stroke="var(--border)" stroke-width="1.5" />
-        <path d="M10 28l6-6 5 5 3-3 6 6" fill="none" stroke="var(--text-faint)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="25" cy="18" r="2" fill="var(--text-faint)" />
-      </svg>
-      <span :style="{ background: info.color }">{{ info.label }}</span>
-    </div>
-
     <div class="export-fields">
       <div class="export-name">
         <input
@@ -191,6 +173,24 @@ defineExpose({ save, saveAs });
       <button class="primary" :disabled="!ready || busy" :title="`Save (${modKey}S)`" @click="save">
         <Icon name="save" /> Save
       </button>
+    </div>
+
+    <div
+      class="file-badge"
+      :class="{ draggable: ready, dragging }"
+      :title="badgeTitle"
+      role="button"
+      :aria-label="`Drag out as ${capture.name}.${format}`"
+      @pointerdown="onBadgeDown"
+      @dragstart.prevent
+    >
+      <svg viewBox="0 0 40 48" aria-hidden="true">
+        <path d="M6 2h20l10 10v32a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5" />
+        <path d="M26 2v8a2 2 0 0 0 2 2h8" fill="none" stroke="var(--border)" stroke-width="1.5" />
+        <path d="M10 28l6-6 5 5 3-3 6 6" fill="none" stroke="var(--text-faint)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="25" cy="18" r="2" fill="var(--text-faint)" />
+      </svg>
+      <span :style="{ background: info.color }">{{ info.label }}</span>
     </div>
   </div>
 </template>
