@@ -7,8 +7,11 @@ already uses. Linux has no code signing or notarization step.
 
 ## What gets published
 
-The job runs once on `ubuntu-22.04` (x64) and once on `ubuntu-22.04-arm` (ARM64).
-Building on 22.04 keeps the binaries working on distros with glibc 2.35 or newer.
+The job runs once on `ubuntu-24.04` (x64) and once on `ubuntu-24.04-arm` (ARM64).
+Lockshot builds on 24.04 rather than 22.04 like Shipyard and Recon because its
+PipeWire bindings (used for Wayland screen capture) need PipeWire 1.0 headers, which
+22.04 doesn't have. The binaries need glibc 2.39 or newer: Ubuntu 24.04, Debian 13,
+Fedora 40, and later.
 Besides the usual Tauri packages, the job installs the PipeWire, XCB, and GBM
 development libraries that screen capture needs on Wayland and X11.
 

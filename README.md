@@ -87,7 +87,7 @@ Pick one package. Each one updates itself from **Check for Updates…** in the t
 | [.deb](https://github.com/fylzero/lockshot/releases/latest/download/Lockshot-linux-x64.deb) (Debian, Ubuntu, Mint) | `sudo apt install ./Lockshot-linux-x64.deb` |
 | [.rpm](https://github.com/fylzero/lockshot/releases/latest/download/Lockshot-linux-x64.rpm) (Fedora, RHEL, openSUSE) | `sudo dnf install ./Lockshot-linux-x64.rpm` |
 
-Use the `arm64` files on ARM machines. The tray icon needs an AppIndicator host; GNOME requires the AppIndicator extension. HEIC export needs libheif's `heif-enc`.
+Use the `arm64` files on ARM machines. Lockshot needs Ubuntu 24.04, Debian 13, Fedora 40, or a newer distro. The tray icon needs an AppIndicator host; GNOME requires the AppIndicator extension. HEIC export needs libheif's `heif-enc`.
 
 Under Wayland, apps can't grab global hotkeys, so bind these commands in your desktop's keyboard settings instead (with the AppImage, run the AppImage with the same flag):
 
