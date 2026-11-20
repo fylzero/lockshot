@@ -179,29 +179,29 @@ async function usePreset(which = preset.value) {
             <Icon name="area" />
             <strong>Capture area</strong>
             <span v-if="settings.hotkeys.area" class="capture-keys">
-              <kbd v-for="(k, i) in acceleratorKeys(settings.hotkeys.area, env.os)" :key="i">{{ k }}</kbd>
+              <template v-for="(k, i) in acceleratorKeys(settings.hotkeys.area, env.os)" :key="i"><span v-if="i" class="key-plus">+</span>{{ k }}</template>
             </span>
           </button>
           <button class="capture-card" @click="capture('window')">
             <Icon name="window" />
             <strong>Capture window</strong>
             <span v-if="settings.hotkeys.window" class="capture-keys">
-              <kbd v-for="(k, i) in acceleratorKeys(settings.hotkeys.window, env.os)" :key="i">{{ k }}</kbd>
+              <template v-for="(k, i) in acceleratorKeys(settings.hotkeys.window, env.os)" :key="i"><span v-if="i" class="key-plus">+</span>{{ k }}</template>
             </span>
           </button>
           <button class="capture-card" @click="capture('screen')">
             <Icon name="screen" />
             <strong>Capture screen</strong>
             <span v-if="settings.hotkeys.screen" class="capture-keys">
-              <kbd v-for="(k, i) in acceleratorKeys(settings.hotkeys.screen, env.os)" :key="i">{{ k }}</kbd>
+              <template v-for="(k, i) in acceleratorKeys(settings.hotkeys.screen, env.os)" :key="i"><span v-if="i" class="key-plus">+</span>{{ k }}</template>
             </span>
           </button>
-          <button class="capture-card" @click="openImageFile">
-            <Icon name="folder" />
-            <strong>Open image…</strong>
-            <span class="muted capture-keys">or drop one here</span>
-          </button>
         </div>
+        <button class="open-image" @click="openImageFile">
+          <Icon name="folder" />
+          <strong>Open image…</strong>
+          <span class="muted">or drop one here</span>
+        </button>
       </template>
     </div>
   </div>

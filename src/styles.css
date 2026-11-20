@@ -300,11 +300,13 @@ a {
   overflow: auto;
   display: flex;
   justify-content: center;
-  padding: 1.75rem 1.5rem 3rem;
+  padding: 2rem 1.5rem;
 }
 
 .home-inner {
   width: min(42rem, 100%);
+  /* Centered when there's room; auto margins never clip the top on overflow. */
+  margin-block: auto;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -321,11 +323,15 @@ a {
 .home-hero img {
   width: 13rem;
   height: auto;
+  /* The PNG has ~13% transparent space above the artwork; don't let it
+     count as extra room at the top. */
+  margin-top: -1.7rem;
   filter: drop-shadow(0 18px 30px var(--shadow));
 }
 
 .home-hero p {
   margin: 0;
+  font-size: 1.05rem;
 }
 
 .home-hotkeys {
@@ -338,44 +344,68 @@ a {
 
 .capture-keys {
   display: inline-flex;
-  gap: 0.25rem;
-  min-height: 1.75rem;
+  gap: 0.3rem;
   align-items: center;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
+  color: var(--text-soft);
 }
 
-/* Same size as the hotkey buttons in Settings, not the tiny inline kbd. */
-.capture-keys kbd {
-  min-width: 1.75em;
-  padding: 0.15rem 0.45rem;
-  font-size: 0.95rem;
+.capture-keys .key-plus {
+  color: var(--text-faint);
 }
 
 .capture-cards {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.85rem;
 }
 
 .capture-card {
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  flex: 1 1 10rem;
-  max-width: 13.5rem;
-  padding: 1rem;
-  border-radius: 12px;
+  gap: 0.6rem;
+  padding: 1.5rem 1rem 1.3rem;
+  border-radius: 14px;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.capture-card:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-text) 7%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--accent-text) 45%, transparent);
+  transform: translateY(-1px);
 }
 
 .capture-card svg {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 2.2rem;
+  height: 2.2rem;
   color: var(--accent-text);
 }
 
 .capture-card strong {
-  font-size: 0.95rem;
+  font-size: 1.1rem;
+}
+
+/* A wide, quiet drop target under the capture cards. */
+.open-image {
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border-style: dashed;
+  border-radius: 14px;
+  background: transparent;
+  font-size: 1rem;
+  white-space: normal;
+}
+
+.open-image:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-text) 6%, transparent);
+  border-color: color-mix(in srgb, var(--accent-text) 45%, transparent);
+}
+
+.open-image svg {
+  width: 1.3rem;
+  height: 1.3rem;
+  color: var(--accent-text);
 }
 
 /* ---- Editor ---- */
