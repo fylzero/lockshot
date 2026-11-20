@@ -271,7 +271,7 @@ pub async fn drag_image(
         .run_on_main_thread(move || {
             let item = drag::DragItem::Files(vec![path]);
             let icon = drag::Image::Raw(preview);
-            let result = (|| -> Result<(), String> {
+            let start = || -> Result<(), String> {
                 #[cfg(target_os = "linux")]
                 let handle = target.gtk_window().map_err(|err| err.to_string())?;
                 #[cfg(target_os = "linux")]
@@ -280,8 +280,8 @@ pub async fn drag_image(
                 let handle = &target;
                 drag::start_drag(handle, item, icon, |_, _| {}, drag::Options::default())
                     .map_err(|err| err.to_string())
-            })();
-            let _ = tx.send(result);
+            };
+            let _ = tx.send(start());
         })
         .map_err(|err| err.to_string())?;
     tauri::async_runtime::spawn_blocking(move || rx.recv())

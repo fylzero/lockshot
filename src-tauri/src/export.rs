@@ -91,7 +91,12 @@ pub fn drag_dir() -> PathBuf {
  * dropped file keeps the exact export name. Earlier drags are cleared first;
  * a drop target has read or copied its file by the time the next drag begins.
  */
-pub fn write_drag_file(png: &[u8], format: &str, quality: u8, stem: &str) -> Result<PathBuf, String> {
+pub fn write_drag_file(
+    png: &[u8],
+    format: &str,
+    quality: u8,
+    stem: &str,
+) -> Result<PathBuf, String> {
     let root = drag_dir();
     let _ = fs::remove_dir_all(&root);
     let path = root

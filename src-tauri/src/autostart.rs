@@ -3,13 +3,14 @@
 //! `launchAtLogin` setting at every launch and whenever the setting changes.
 
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_autostart::ManagerExt;
 
 pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    let builder = tauri_plugin_autostart::Builder::new();
     /* A Launch Agent needs no Automation permission, unlike AppleScript. */
-    tauri_plugin_autostart::Builder::new()
-        .macos_launcher(MacosLauncher::LaunchAgent)
-        .build()
+    #[cfg(target_os = "macos")]
+    let builder = builder.macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent);
+    builder.build()
 }
 
 /// Add or remove the login entry so it matches `enabled`.
