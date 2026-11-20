@@ -7,13 +7,15 @@ use tauri::{AppHandle, Manager};
 const SETTINGS_FILE: &str = "settings.json";
 
 /// The actions a global hotkey can trigger.
-pub const ACTIONS: [&str; 3] = ["area", "screen", "editor"];
+pub const ACTIONS: [&str; 4] = ["area", "window", "screen", "editor"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Hotkeys {
     /// Drag to select part of a screen.
     pub area: String,
+    /// Click a window to capture just that window.
+    pub window: String,
     /// The whole screen under the pointer.
     pub screen: String,
     /// Bring the Lockshot window forward.
@@ -30,6 +32,7 @@ impl Default for Hotkeys {
     fn default() -> Self {
         Self {
             area: "Alt+Shift+4".into(),
+            window: "Alt+Shift+5".into(),
             screen: "Alt+Shift+3".into(),
             editor: "Alt+Shift+L".into(),
         }
@@ -40,6 +43,7 @@ impl Hotkeys {
     pub fn get(&self, action: &str) -> Option<&str> {
         match action {
             "area" => Some(&self.area),
+            "window" => Some(&self.window),
             "screen" => Some(&self.screen),
             "editor" => Some(&self.editor),
             _ => None,
@@ -49,6 +53,7 @@ impl Hotkeys {
     pub fn set(&mut self, action: &str, value: String) -> bool {
         match action {
             "area" => self.area = value,
+            "window" => self.window = value,
             "screen" => self.screen = value,
             "editor" => self.editor = value,
             _ => return false,
@@ -259,6 +264,7 @@ mod tests {
         assert_eq!(parsed.format, "jpg");
         assert_eq!(parsed.hotkeys.area, "");
         assert_eq!(parsed.hotkeys.screen, Hotkeys::default().screen);
+        assert_eq!(parsed.hotkeys.window, Hotkeys::default().window);
         assert_eq!(parsed.jpeg_quality, 90);
         assert!(parsed.launch_at_login);
         assert!(parsed.keep_running_in_background);
@@ -278,8 +284,8 @@ mod tests {
             "\"fromat\" is not a Lockshot setting."
         );
         assert_eq!(
-            from_json(r#"{ "hotkeys": { "window": "Alt+W" } }"#).unwrap_err(),
-            "\"hotkeys.window\" is not a Lockshot setting."
+            from_json(r#"{ "hotkeys": { "scroll": "Alt+W" } }"#).unwrap_err(),
+            "\"hotkeys.scroll\" is not a Lockshot setting."
         );
     }
 

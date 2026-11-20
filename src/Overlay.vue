@@ -4,19 +4,16 @@ import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api } from "./api";
 import { fetchPixels } from "./pixels";
+import type { OverlayStart, WindowTarget } from "./types";
 
 /*
- * One of these covers each display during an area capture, showing the frozen
- * screenshot of that display. The window ("overlay-<index>") is made once,
- * kept hidden between captures, and told about each new capture with an
- * "overlay-start" event, so it can appear without loading a page first.
+ * One of these covers each display during an area or window capture, showing
+ * the frozen screenshot of that display. The window ("overlay-<index>") is
+ * made once, kept hidden between captures, and told about each new capture
+ * with an "overlay-start" event, so it can appear without loading a page
+ * first. In window mode it highlights the window under the pointer instead
+ * of drawing a selection, and a click captures that window.
  */
-interface OverlayStart {
-  session: string;
-  index: number;
-  width: number;
-  height: number;
-}
 
 const win = getCurrentWindow();
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -26,6 +23,37 @@ const pointer = ref<{ x: number; y: number } | null>(null);
 const start = ref<{ x: number; y: number } | null>(null);
 const naturalWidth = ref(0);
 const finishing = ref(false);
+const mode = ref<OverlayStart["mode"]>("area");
+const windows = ref<WindowTarget[]>([]);
+
+/** Capture Window: the frontmost window under the pointer, in CSS pixels. */
+const hovered = computed(() => {
+  const p = pointer.value;
+  if (mode.value !== "window" || !p) return null;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const target = windows.value.find(
+    (w) => p.x >= w.x * W && p.y >= w.y * H && p.x < (w.x + w.width) * W && p.y < (w.y + w.height) * H,
+  );
+  if (!target) return null;
+  return { target, x: target.x * W, y: target.y * H, w: target.width * W, h: target.height * H };
+});
+
+/** Centre the window's name on the part of it this display shows. */
+const hoveredLabelStyle = computed(() => {
+  const h = hovered.value;
+  if (!h) return {};
+  const left = Math.max(0, h.x);
+  const top = Math.max(0, h.y);
+  const right = Math.min(window.innerWidth, h.x + h.w);
+  const bottom = Math.min(window.innerHeight, h.y + h.h);
+  return { left: `${(left + right) / 2}px`, top: `${(top + bottom) / 2}px` };
+});
+
+const hoveredSize = computed(() => {
+  const h = hovered.value;
+  return h ? `${Math.round(h.w * density.value)} × ${Math.round(h.h * density.value)}` : "";
+});
 
 const selection = computed(() => {
   if (!start.value || !pointer.value) return null;
@@ -62,6 +90,8 @@ async function begin(next: OverlayStart) {
   start.value = null;
   pointer.value = null;
   finishing.value = false;
+  mode.value = next.mode;
+  windows.value = next.windows;
   try {
     const pixels = await fetchPixels(`session/${next.session}/${next.index}`, next.width, next.height);
     if (session.value !== next.session || !canvas.value) return;
@@ -90,6 +120,11 @@ async function begin(next: OverlayStart) {
   try {
     const [cursor, pos, size] = await Promise.all([cursorPosition(), win.outerPosition(), win.outerSize()]);
     const inside = cursor.x >= pos.x && cursor.y >= pos.y && cursor.x < pos.x + size.width && cursor.y < pos.y + size.height;
+    /* Highlight the window under the pointer before it first moves. */
+    if (inside && mode.value === "window" && !pointer.value) {
+      const scale = size.width / window.innerWidth;
+      pointer.value = { x: (cursor.x - pos.x) / scale, y: (cursor.y - pos.y) / scale };
+    }
     if (inside) await win.setFocus();
   } catch {
     await win.setFocus();
@@ -108,6 +143,11 @@ function onPointerDown(event: PointerEvent) {
     return;
   }
   if (event.button !== 0) return;
+  if (mode.value === "window") {
+    pointer.value = { x: event.clientX, y: event.clientY };
+    void pickWindow();
+    return;
+  }
   (event.target as HTMLElement).setPointerCapture(event.pointerId);
   start.value = { x: event.clientX, y: event.clientY };
   pointer.value = { ...start.value };
@@ -129,6 +169,18 @@ async function onPointerUp() {
   try {
     await api.finishArea(session.value, rect);
   } catch {
+    await api.cancelArea();
+  }
+}
+
+async function pickWindow() {
+  const target = hovered.value?.target;
+  if (!target || finishing.value) return;
+  finishing.value = true;
+  try {
+    await api.finishWindow(session.value, target.id);
+  } catch (err) {
+    void emitTo("main", "capture-error", typeof err === "string" ? err : "Lockshot couldn't capture that window.");
     await api.cancelArea();
   }
 }
@@ -162,7 +214,24 @@ onBeforeUnmount(() => {
     @pointerleave="!start && (pointer = null)"
   >
     <canvas ref="canvas" class="overlay-image" />
-    <template v-if="loaded">
+    <template v-if="loaded && mode === 'window'">
+      <template v-if="hovered">
+        <div
+          class="overlay-window"
+          :style="{ left: `${hovered.x}px`, top: `${hovered.y}px`, width: `${hovered.w}px`, height: `${hovered.h}px` }"
+        />
+        <div class="overlay-window-label" :style="hoveredLabelStyle">
+          <strong>{{ hovered.target.label || "Window" }}</strong>
+          <span>{{ hoveredSize }}</span>
+        </div>
+      </template>
+      <div class="overlay-hint">
+        <span v-if="windows.length">Click a window to capture it</span>
+        <span v-else>No windows to capture on this display</span>
+        <span><kbd>Esc</kbd> to cancel</span>
+      </div>
+    </template>
+    <template v-else-if="loaded">
       <div
         v-if="selection"
         class="overlay-selection"

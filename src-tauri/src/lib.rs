@@ -9,6 +9,7 @@ mod platform;
 mod settings;
 mod system_shortcuts;
 mod tray;
+mod window_list;
 
 use std::sync::Mutex;
 
@@ -55,11 +56,12 @@ pub fn hide_main(app: &AppHandle) {
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 }
 
-/// `lockshot --area` / `lockshot --screen`, for desktops (Wayland) where
+/// `lockshot --area` / `--window` / `--screen`, for desktops (Wayland) where
 /// hotkeys have to be bound in the system settings instead.
 fn cli_action(args: &[String]) -> Option<&'static str> {
     args.iter().skip(1).find_map(|arg| match arg.as_str() {
         "--area" => Some("area"),
+        "--window" => Some("window"),
         "--screen" => Some("screen"),
         "--open" => Some("editor"),
         _ => None,
@@ -71,13 +73,13 @@ fn cli_action(args: &[String]) -> Option<&'static str> {
 pub fn run_action(app: &AppHandle, action: &str) {
     let app = app.clone();
     match action {
-        "area" | "screen" => {
+        "area" | "window" | "screen" => {
             let action = action.to_string();
             tauri::async_runtime::spawn_blocking(move || {
-                let result = if action == "area" {
-                    capture::start_area(&app)
-                } else {
-                    capture::capture_screen(&app)
+                let result = match action.as_str() {
+                    "area" => capture::start_area(&app),
+                    "window" => capture::start_window(&app),
+                    _ => capture::capture_screen(&app),
                 };
                 if let Err(err) = result {
                     let _ = app.emit_to("main", "capture-error", err);
@@ -181,6 +183,7 @@ pub fn run() {
             commands::capture,
             commands::open_image,
             commands::finish_area,
+            commands::finish_window,
             commands::overlay_pending,
             commands::cancel_area,
             commands::latest_capture,

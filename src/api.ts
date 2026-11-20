@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Bootstrap,
+  CaptureMode,
   CaptureReady,
   ExportFormat,
   HotkeyAction,
+  OverlayStart,
   PermissionStatus,
   Settings,
   SystemShortcut,
@@ -17,12 +19,12 @@ export const api = {
   resetHotkeys: () => invoke<Settings>("reset_hotkeys"),
   pauseHotkeys: (paused: boolean) => invoke<void>("pause_hotkeys", { paused }),
   validateHotkey: (accelerator: string) => invoke<void>("validate_hotkey", { accelerator }),
-  capture: (mode: "area" | "screen") => invoke<void>("capture", { mode }),
+  capture: (mode: CaptureMode) => invoke<void>("capture", { mode }),
   openImage: (path: string) => invoke<void>("open_image", { path }),
   finishArea: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
     invoke<void>("finish_area", { session, rect }),
-  overlayPending: () =>
-    invoke<{ session: string; index: number; width: number; height: number } | null>("overlay_pending"),
+  finishWindow: (session: string, windowId: number) => invoke<void>("finish_window", { session, windowId }),
+  overlayPending: () => invoke<OverlayStart | null>("overlay_pending"),
   cancelArea: () => invoke<void>("cancel_area"),
   latestCapture: () => invoke<CaptureReady | null>("latest_capture"),
   releaseCapture: (id: string) => invoke<void>("release_capture", { id }),

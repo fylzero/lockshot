@@ -391,12 +391,13 @@ const EDITOR_KEYS = [
           </div>
           <div class="row">
             <div class="row-label">
-              <small>Defaults: area {{ formatAccelerator("Alt+Shift+4", env.os) }}, screen {{ formatAccelerator("Alt+Shift+3", env.os) }}, open {{ formatAccelerator("Alt+Shift+L", env.os) }}</small>
+              <small>Defaults: area {{ formatAccelerator("Alt+Shift+4", env.os) }}, window {{ formatAccelerator("Alt+Shift+5", env.os) }}, screen {{ formatAccelerator("Alt+Shift+3", env.os) }}, open {{ formatAccelerator("Alt+Shift+L", env.os) }}</small>
             </div>
             <div class="row-control">
-              <button v-if="preset" @click="applyPreset(preset)">{{ preset.label }}</button>
+              <button v-if="env.os === 'macos' && preset" @click="applyPreset(preset)">{{ preset.label }}</button>
+              <button @click="resetHotkeys">{{ env.os === "macos" ? "Use ⌥" : "Use Alt" }}</button>
               <button v-if="pcPreset" @click="applyPreset(pcPreset)">{{ pcPreset.label }}</button>
-              <button @click="resetHotkeys"><Icon name="reset" /> Reset to defaults</button>
+              <button v-else-if="preset" @click="applyPreset(preset)">{{ preset.label }}</button>
             </div>
           </div>
         </div>
@@ -449,7 +450,7 @@ const EDITOR_KEYS = [
           <div class="card-title">While capturing</div>
           <div class="row">
             <div class="row-label muted">
-              Drag to select an area · click once for the whole screen · <kbd>Esc</kbd> or right-click to cancel.
+              Drag to select an area · click once for the whole screen · in Capture window, click the highlighted window · <kbd>Esc</kbd> or right-click to cancel.
               Captures also start from the Lockshot icon in the {{ env.os === "macos" ? "menu bar" : "system tray" }}.
             </div>
           </div>

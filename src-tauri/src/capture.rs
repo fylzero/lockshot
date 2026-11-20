@@ -1,7 +1,8 @@
 //! Taking screenshots. A capture grabs every monitor first, then opens one
 //! borderless overlay per monitor showing that frozen image, so the selection
 //! is drawn over exactly what gets cropped and the overlays themselves never
-//! end up in the shot.
+//! end up in the shot. Capture Window uses the same overlays to pick a
+//! window, then captures that window on its own.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -15,17 +16,34 @@ use tauri::{
 };
 use xcap::Monitor;
 
-use crate::platform;
+use crate::{platform, window_list};
 
 pub const OVERLAY_PREFIX: &str = "overlay-";
 
 struct MonitorShot {
     image: Arc<RgbaImage>,
+    /// Capture Window: the windows on this display, front to back.
+    windows: Vec<WindowTarget>,
 }
 
 struct Session {
     id: String,
+    mode: OverlayMode,
     shots: Vec<MonitorShot>,
+}
+
+impl Session {
+    fn start(&self, index: usize) -> Option<OverlayStart> {
+        let shot = self.shots.get(index)?;
+        Some(OverlayStart {
+            session: self.id.clone(),
+            index,
+            width: shot.image.width(),
+            height: shot.image.height(),
+            mode: self.mode,
+            windows: shot.windows.clone(),
+        })
+    }
 }
 
 #[derive(Default)]
@@ -48,6 +66,28 @@ pub struct CaptureReady {
     pub name: Option<String>,
 }
 
+/// What a capture overlay does with a click.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OverlayMode {
+    /// Drag to select part of the display.
+    Area,
+    /// Click the window to capture.
+    Window,
+}
+
+/// A window an overlay can highlight, in fractions of its display.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowTarget {
+    pub id: u32,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub label: String,
+}
+
 /// Tells an overlay page which frozen display to show.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +96,8 @@ pub struct OverlayStart {
     pub index: usize,
     pub width: u32,
     pub height: u32,
+    pub mode: OverlayMode,
+    pub windows: Vec<WindowTarget>,
 }
 
 #[derive(Deserialize)]
@@ -251,12 +293,44 @@ pub fn prewarm(app: &AppHandle) {
     }
 }
 
+/// The windows that overlap a display, placed in fractions of it.
+fn windows_on(bounds: &Bounds, windows: &[window_list::AppWindow]) -> Vec<WindowTarget> {
+    let (bx, by) = (bounds.x as f64, bounds.y as f64);
+    let (bw, bh) = (bounds.width as f64, bounds.height as f64);
+    windows
+        .iter()
+        .filter(|w| w.x < bx + bw && w.y < by + bh && w.x + w.width > bx && w.y + w.height > by)
+        .map(|w| WindowTarget {
+            id: w.id,
+            x: (w.x - bx) / bw,
+            y: (w.y - by) / bh,
+            width: w.width / bw,
+            height: w.height / bh,
+            label: w.label.clone(),
+        })
+        .collect()
+}
+
 /// Freeze every monitor and show the selection overlays over them.
 pub fn start_area(app: &AppHandle) -> Result<(), String> {
+    start_overlays(app, OverlayMode::Area)
+}
+
+/// Freeze every monitor and let the user click the window to capture.
+pub fn start_window(app: &AppHandle) -> Result<(), String> {
+    start_overlays(app, OverlayMode::Window)
+}
+
+fn start_overlays(app: &AppHandle, mode: OverlayMode) -> Result<(), String> {
     let start = Instant::now();
     ensure_permission(app)?;
     cancel_area(app);
 
+    let windows = if mode == OverlayMode::Window {
+        window_list::all()
+    } else {
+        Vec::new()
+    };
     let monitors = Monitor::all().map_err(capture_err)?;
     let point = platform::cursor_point(app);
     let mut shots = Vec::new();
@@ -269,6 +343,7 @@ pub fn start_area(app: &AppHandle) -> Result<(), String> {
         let under_pointer = point.is_some_and(|p| contains(&bounds, p));
         shots.push(MonitorShot {
             image: Arc::new(image),
+            windows: windows_on(&bounds, &windows),
         });
         placements.push((bounds, under_pointer));
     }
@@ -277,21 +352,15 @@ pub fn start_area(app: &AppHandle) -> Result<(), String> {
     }
     lap(start, "displays captured");
 
-    let id = uuid::Uuid::new_v4().simple().to_string();
-    let starts: Vec<OverlayStart> = shots
-        .iter()
-        .enumerate()
-        .map(|(index, shot)| OverlayStart {
-            session: id.clone(),
-            index,
-            width: shot.image.width(),
-            height: shot.image.height(),
-        })
-        .collect();
-    *app.state::<CaptureState>().session.lock().unwrap() = Some(Session {
-        id: id.clone(),
+    let session = Session {
+        id: uuid::Uuid::new_v4().simple().to_string(),
+        mode,
         shots,
-    });
+    };
+    let starts: Vec<OverlayStart> = (0..session.shots.len())
+        .filter_map(|index| session.start(index))
+        .collect();
+    *app.state::<CaptureState>().session.lock().unwrap() = Some(session);
 
     let count = placements.len();
     for ((bounds, focus), overlay) in placements.into_iter().zip(starts) {
@@ -328,14 +397,7 @@ pub fn overlay_pending(app: &AppHandle, label: &str) -> Option<OverlayStart> {
     let index = parse_overlay_label(label)?;
     let state = app.state::<CaptureState>();
     let session = state.session.lock().unwrap();
-    let current = session.as_ref()?;
-    let shot = current.shots.get(index)?;
-    Some(OverlayStart {
-        session: current.id.clone(),
-        index,
-        width: shot.image.width(),
-        height: shot.image.height(),
-    })
+    session.as_ref()?.start(index)
 }
 
 /**
@@ -349,36 +411,81 @@ pub fn finish_area(
     session_id: &str,
     rect: Option<Rect>,
 ) -> Result<(), String> {
-    let index = parse_overlay_label(label).ok_or("That capture overlay is not recognised.")?;
-    let image = {
-        let state = app.state::<CaptureState>();
-        let mut session = state.session.lock().unwrap();
-        if session.as_ref().is_none_or(|s| s.id != session_id) {
-            return Err("This capture has already finished.".into());
-        }
-        let current = session.take().expect("checked above");
-        current
-            .shots
-            .into_iter()
-            .nth(index)
-            .ok_or("That display is no longer available.")?
-            .image
-    };
+    let image = take_shot(app, label, session_id)?.image;
     close_overlays(app);
 
     let cropped = match rect {
         None => Arc::try_unwrap(image).unwrap_or_else(|shared| (*shared).clone()),
-        Some(rect) => {
-            let (w, h) = (image.width() as f64, image.height() as f64);
-            let (iw, ih) = (image.width(), image.height());
-            let x = ((rect.x.clamp(0.0, 1.0) * w).round() as u32).min(iw - 1);
-            let y = ((rect.y.clamp(0.0, 1.0) * h).round() as u32).min(ih - 1);
-            let cw = ((rect.width.max(0.0) * w).round() as u32).clamp(1, iw - x);
-            let ch = ((rect.height.max(0.0) * h).round() as u32).clamp(1, ih - y);
-            image::imageops::crop_imm(image.as_ref(), x, y, cw, ch).to_image()
-        }
+        Some(rect) => crop(&image, &rect),
     };
     deliver(app, cropped, None);
+    Ok(())
+}
+
+/// End the session and hand back the frozen display the overlay covered.
+fn take_shot(app: &AppHandle, label: &str, session_id: &str) -> Result<MonitorShot, String> {
+    let index = parse_overlay_label(label).ok_or("That capture overlay is not recognised.")?;
+    let state = app.state::<CaptureState>();
+    let mut session = state.session.lock().unwrap();
+    if session.as_ref().is_none_or(|s| s.id != session_id) {
+        return Err("This capture has already finished.".into());
+    }
+    let current = session.take().expect("checked above");
+    current
+        .shots
+        .into_iter()
+        .nth(index)
+        .ok_or_else(|| "That display is no longer available.".into())
+}
+
+/// Part of an image, from a rect in fractions of it.
+fn crop(image: &RgbaImage, rect: &Rect) -> RgbaImage {
+    let (w, h) = (image.width() as f64, image.height() as f64);
+    let (iw, ih) = (image.width(), image.height());
+    let x = ((rect.x.clamp(0.0, 1.0) * w).round() as u32).min(iw - 1);
+    let y = ((rect.y.clamp(0.0, 1.0) * h).round() as u32).min(ih - 1);
+    let right = (rect.x + rect.width).clamp(0.0, 1.0) * w;
+    let bottom = (rect.y + rect.height).clamp(0.0, 1.0) * h;
+    let cw = ((right.round() as u32).saturating_sub(x)).clamp(1, iw - x);
+    let ch = ((bottom.round() as u32).saturating_sub(y)).clamp(1, ih - y);
+    image::imageops::crop_imm(image, x, y, cw, ch).to_image()
+}
+
+/**
+ * Capture the window the user clicked, on its own, so windows in front of
+ * it and the overlays never show. If the system will not capture it alone,
+ * fall back to cutting it out of the frozen display.
+ */
+pub fn finish_window(
+    app: &AppHandle,
+    label: &str,
+    session_id: &str,
+    window_id: u32,
+) -> Result<(), String> {
+    let shot = take_shot(app, label, session_id)?;
+    close_overlays(app);
+    let target = shot
+        .windows
+        .iter()
+        .find(|w| w.id == window_id)
+        .ok_or("That window is no longer available.")?;
+    /* X11 reads window pixels off the screen, so let the overlay go first. */
+    if cfg!(target_os = "linux") {
+        std::thread::sleep(std::time::Duration::from_millis(120));
+    }
+    let image = match window_list::capture(window_id) {
+        Ok(image) if image.width() > 1 && image.height() > 1 => image,
+        _ => crop(
+            &shot.image,
+            &Rect {
+                x: target.x,
+                y: target.y,
+                width: target.width,
+                height: target.height,
+            },
+        ),
+    };
+    deliver(app, image, None);
     Ok(())
 }
 

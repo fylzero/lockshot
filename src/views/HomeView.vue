@@ -7,7 +7,7 @@ import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
 import { env, openImageFile, saveSettingsSoon, settings, showToast } from "../store";
 import { acceleratorKeys, pcKeyboardPreset, systemPreset } from "../hotkeys";
-import type { HotkeyAction, PermissionStatus } from "../types";
+import type { CaptureMode, HotkeyAction, PermissionStatus } from "../types";
 
 /*
  * Home walks through setup one step at a time: Screen Recording, then
@@ -52,7 +52,7 @@ onMounted(async () => {
   if (permission.value) onPermission(permission.value);
 });
 
-async function capture(mode: "area" | "screen") {
+async function capture(mode: CaptureMode) {
   try {
     await api.capture(mode);
   } catch (err) {
@@ -117,12 +117,14 @@ async function usePreset(which = preset.value) {
             <div class="home-hotkeys">
               <span>Capture area</span>
               <HotkeyRecorder :value="settings.hotkeys.area" label="Capture area" @change="setHotkey('area', $event)" @invalid="showToast($event, 'error')" />
+              <span>Capture window</span>
+              <HotkeyRecorder :value="settings.hotkeys.window" label="Capture window" @change="setHotkey('window', $event)" @invalid="showToast($event, 'error')" />
               <span>Capture screen</span>
               <HotkeyRecorder :value="settings.hotkeys.screen" label="Capture screen" @change="setHotkey('screen', $event)" @invalid="showToast($event, 'error')" />
             </div>
             <p class="muted" style="margin: 0.6rem 0 0; font-size: 0.85rem">
               Want {{ env.os === "macos" ? "⌘⇧4" : "PrtSc" }} instead?
-              <button v-if="env.os === 'macos' && preset" class="link" @click="usePreset(preset)">Use ⌘⇧4 and ⌘⇧3 for Lockshot.</button>
+              <button v-if="env.os === 'macos' && preset" class="link" @click="usePreset(preset)">Use the ⌘⇧ keys for Lockshot.</button>
               <RouterLink v-else to="/settings/hotkeys">See how to take over the system keys.</RouterLink>
             </p>
             <p v-if="pcPreset" class="muted" style="margin: 0.3rem 0 0; font-size: 0.85rem">
@@ -178,6 +180,13 @@ async function usePreset(which = preset.value) {
             <strong>Capture area</strong>
             <span v-if="settings.hotkeys.area" class="capture-keys">
               <kbd v-for="(k, i) in acceleratorKeys(settings.hotkeys.area, env.os)" :key="i">{{ k }}</kbd>
+            </span>
+          </button>
+          <button class="capture-card" @click="capture('window')">
+            <Icon name="window" />
+            <strong>Capture window</strong>
+            <span v-if="settings.hotkeys.window" class="capture-keys">
+              <kbd v-for="(k, i) in acceleratorKeys(settings.hotkeys.window, env.os)" :key="i">{{ k }}</kbd>
             </span>
           </button>
           <button class="capture-card" @click="capture('screen')">

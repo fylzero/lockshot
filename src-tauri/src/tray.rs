@@ -22,6 +22,7 @@ pub fn menu(app: &AppHandle, hotkeys: &Hotkeys) -> tauri::Result<Menu<Wry>> {
         app,
         &[
             &item(app, "area", "Capture Area", &hotkeys.area)?,
+            &item(app, "window", "Capture Window", &hotkeys.window)?,
             &item(app, "screen", "Capture Screen", &hotkeys.screen)?,
             &PredefinedMenuItem::separator(app)?,
             &item(app, "editor", "Open Lockshot", &hotkeys.editor)?,

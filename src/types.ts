@@ -1,11 +1,13 @@
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 export type ExportFormat = "png" | "jpg" | "heic" | "tiff" | "gif" | "bmp" | "pdf";
-export type HotkeyAction = "area" | "screen" | "editor";
+export type HotkeyAction = "area" | "window" | "screen" | "editor";
+export type CaptureMode = "area" | "window" | "screen";
 export type OsName = "macos" | "windows" | "linux";
 
 export interface Hotkeys {
   area: string;
+  window: string;
   screen: string;
   editor: string;
 }
@@ -51,6 +53,27 @@ export interface CaptureReady {
   height: number;
   /** Set for an image opened from disk: its file name without extension. */
   name?: string | null;
+}
+
+/** A window Capture Window can pick, in fractions of the overlay's display. */
+export interface WindowTarget {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+}
+
+/** Tells a capture overlay which frozen display to show, and what a click does. */
+export interface OverlayStart {
+  session: string;
+  index: number;
+  width: number;
+  height: number;
+  mode: "area" | "window";
+  /** Front to back; empty for an area capture. */
+  windows: WindowTarget[];
 }
 
 export interface PermissionStatus {

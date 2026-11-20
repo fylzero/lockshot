@@ -147,6 +147,7 @@ pub async fn capture(app: AppHandle, mode: String) -> Result<(), String> {
     match mode.as_str() {
         "area" => capture::start_area(&app),
         "screen" => capture::capture_screen(&app),
+        "window" => capture::start_window(&app),
         _ => Err("Unknown capture mode.".into()),
     }
 }
@@ -164,6 +165,16 @@ pub fn finish_area(
     rect: Option<Rect>,
 ) -> Result<(), String> {
     capture::finish_area(&app, window.label(), &session, rect)
+}
+
+#[tauri::command]
+pub fn finish_window(
+    app: AppHandle,
+    window: WebviewWindow,
+    session: String,
+    window_id: u32,
+) -> Result<(), String> {
+    capture::finish_window(&app, window.label(), &session, window_id)
 }
 
 #[tauri::command]

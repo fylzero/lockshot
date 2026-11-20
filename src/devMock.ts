@@ -53,7 +53,7 @@ export function installMock() {
   ];
   const sample = sampleImage();
   let settings = {
-    hotkeys: { area: "Alt+Shift+4", screen: "Alt+Shift+3", editor: "Alt+Shift+L" },
+    hotkeys: { area: "Alt+Shift+4", window: "Alt+Shift+5", screen: "Alt+Shift+3", editor: "Alt+Shift+L" },
     saveDir: "",
     format: "png",
     filenameTemplate: "Screenshot-{date}-{time}",

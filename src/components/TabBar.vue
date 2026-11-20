@@ -7,6 +7,7 @@ import { env, settings, showToast } from "../store";
 import { formatAccelerator } from "../hotkeys";
 import { useTabs } from "../tabs";
 import { useUpdater } from "../composables/useUpdater";
+import type { CaptureMode } from "../types";
 
 const route = useRoute();
 const router = useRouter();
@@ -36,7 +37,7 @@ watch(
 
 const TAB_ICONS: Record<string, string> = { editor: "image", settings: "settings", changelog: "changelog" };
 
-async function capture(mode: "area" | "screen") {
+async function capture(mode: CaptureMode) {
   try {
     await api.capture(mode);
   } catch (err) {
@@ -106,6 +107,15 @@ function hint(label: string, accelerator?: string) {
         @click="capture('area')"
       >
         <Icon name="area" />
+      </button>
+      <button
+        class="tab-tool"
+        type="button"
+        :title="hint('Capture window', settings?.hotkeys.window)"
+        aria-label="Capture window"
+        @click="capture('window')"
+      >
+        <Icon name="window" />
       </button>
       <button
         class="tab-tool"
