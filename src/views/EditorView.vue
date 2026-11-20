@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { writeImage } from "@tauri-apps/plugin-clipboard-manager";
 import Icon from "../components/Icon.vue";
 import ExportBar from "../components/ExportBar.vue";
+import FileBadge from "../components/FileBadge.vue";
+import type { ExportFormat } from "../types";
 import {
   bounds,
   canvasToPng,
@@ -15,6 +17,7 @@ import {
   TEXT_LINE_HEIGHT,
   translate,
   type Rect,
+  type RedactMode,
   type Shape,
   textOutlineColor,
   textOutlineWidth,
@@ -33,9 +36,10 @@ import { errorMessage } from "../api";
 import { loadBitmap } from "../pixels";
 import { modKey } from "../platform";
 
-/* Drawing tools share one toolbar button that shows whichever is picked. */
+/* Arrow, the most used, gets its own button, left of the shape tools. */
+const ARROW_TOOL = { id: "arrow" as Tool, label: "Arrow", key: "A" };
+/* The other drawing tools share one split button that shows whichever is picked. */
 const SHAPE_TOOLS: { id: Tool; label: string; key: string }[] = [
-  { id: "arrow", label: "Arrow", key: "A" },
   { id: "line", label: "Line", key: "L" },
   { id: "rect", label: "Rectangle", key: "R" },
   { id: "ellipse", label: "Ellipse", key: "O" },
@@ -45,10 +49,11 @@ const SHAPE_TOOLS: { id: Tool; label: string; key: string }[] = [
 ];
 const OTHER_TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: "text", label: "Text", key: "T" },
-  { id: "blur", label: "Pixelate (redact)", key: "B" },
   { id: "crop", label: "Crop", key: "C" },
 ];
-const TOOLS = [...SHAPE_TOOLS, ...OTHER_TOOLS];
+/* Redact has its own menu button, after Text, picking how it hides an area. */
+const REDACT_TOOL = { id: "blur" as Tool, label: "Redact", key: "B" };
+const TOOLS = [ARROW_TOOL, ...SHAPE_TOOLS, ...OTHER_TOOLS, REDACT_TOOL];
 const COLORS = ["#f5418c", "#e40010", "#fc7502", "#fef236", "#06e617", "#00caeb", "#a233ff", "#ffffff", "#000000"];
 const SIZES = [
   { label: "Extra small", stroke: 2, text: 16, step: 11 },
@@ -56,6 +61,11 @@ const SIZES = [
   { label: "Medium", stroke: 7, text: 32, step: 18 },
   { label: "Large", stroke: 11, text: 46, step: 24 },
   { label: "Extra large", stroke: 16, text: 64, step: 32 },
+];
+const REDACT_MODES: { id: RedactMode; label: string }[] = [
+  { id: "pixelate", label: "Pixelate" },
+  { id: "white", label: "Redact white" },
+  { id: "black", label: "Redact black" },
 ];
 const OUTLINES: { id: TextOutline; label: string }[] = [
   { id: "auto", label: "Automatic" },
@@ -65,11 +75,12 @@ const OUTLINES: { id: TextOutline; label: string }[] = [
 ];
 
 const tool = ref<Tool>("arrow");
-const shapeTool = ref<Tool>("arrow");
+const shapeTool = ref<Tool>("line");
 const color = ref(COLORS[0]);
 /* Medium: bold enough to read at a glance on a full-screen capture. */
 const sizeIndex = ref(2);
 const textOutline = ref<TextOutline>("auto");
+const redactMode = ref<RedactMode>("pixelate");
 const shapes = shallowRef<Shape[]>([]);
 const crop = ref<Rect | null>(null);
 /** The crop being drawn while the Crop tool is on; Apply commits it. */
@@ -79,7 +90,7 @@ const editing = ref<TextShape | null>(null);
 const editingText = ref("");
 const past = ref<{ shapes: Shape[]; crop: Rect | null }[]>([]);
 const future = ref<{ shapes: Shape[]; crop: Rect | null }[]>([]);
-const openMenu = ref<"shape" | "color" | "size" | "outline" | null>(null);
+const openMenu = ref<"shape" | "color" | "size" | "outline" | "redact" | null>(null);
 
 const image = shallowRef<ImageBitmap | null>(null);
 const loadError = ref("");
@@ -107,6 +118,7 @@ const outputSize = computed(() => {
 });
 const selectedShape = computed(() => shapes.value.find((s) => s.id === selectedId.value) ?? null);
 const currentShapeTool = computed(() => SHAPE_TOOLS.find((t) => t.id === shapeTool.value)!);
+const currentRedact = computed(() => REDACT_MODES.find((m) => m.id === redactMode.value)!);
 const showOutline = computed(
   () => tool.value === "text" || !!editing.value || selectedShape.value?.kind === "text",
 );
@@ -421,6 +433,7 @@ function onPointerDown(event: PointerEvent) {
       break;
     default:
       draft = { id: newId(), kind: tool.value as "arrow", color: color.value, width: sizeFor("stroke"), x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      if (tool.value === "blur") draft.redact = redactMode.value;
   }
   drag = { start: p, moved: false };
   draw();
@@ -527,10 +540,11 @@ function onPointerUp() {
    color, size or outline restyles the selection (or the text being typed). */
 function applyStyleFrom(shape: Shape) {
   if (shape.kind !== "blur") color.value = shape.color;
+  else redactMode.value = shape.redact ?? "pixelate";
   if (shape.kind === "text") textOutline.value = shape.outline ?? "auto";
 }
 
-function restyleSelected(change: { color?: string; size?: number; outline?: TextOutline }) {
+function restyleSelected(change: { color?: string; size?: number; outline?: TextOutline; redact?: RedactMode }) {
   const t = editing.value;
   if (t) {
     if (change.color) t.color = change.color;
@@ -545,6 +559,7 @@ function restyleSelected(change: { color?: string; size?: number; outline?: Text
       const next = { ...s } as Shape;
       if (change.color && next.kind !== "blur") next.color = change.color;
       if (change.outline && next.kind === "text") next.outline = change.outline;
+      if (change.redact && next.kind === "blur") next.redact = change.redact;
       if (change.size != null) {
         const size = SIZES[change.size];
         if (next.kind === "text") next.size = Math.round(size.text * unit.value);
@@ -579,17 +594,20 @@ function pickOutline(next: TextOutline) {
   openMenu.value = null;
 }
 
+function pickRedact(next: RedactMode) {
+  tool.value = "blur";
+  redactMode.value = next;
+  restyleSelected({ redact: next });
+  openMenu.value = null;
+}
+
 function toggleMenu(menu: NonNullable<typeof openMenu.value>) {
   openMenu.value = openMenu.value === menu ? null : menu;
 }
 
-function onShapeButton() {
-  if (!SHAPE_TOOLS.some((t) => t.id === tool.value)) tool.value = shapeTool.value;
-  toggleMenu("shape");
-}
-
 /* Clicking the toolbar mustn't take focus from the text box being typed in,
-   or it would close before the new color or size reaches it. */
+   or it would close before the new color or size reaches it. The file name
+   field still needs its own clicks. */
 function onToolbarMouseDown(event: MouseEvent) {
   if ((event.target as HTMLElement).tagName !== "INPUT") event.preventDefault();
 }
@@ -729,6 +747,8 @@ async function copy(quiet = false) {
 }
 
 const exportBar = ref<InstanceType<typeof ExportBar> | null>(null);
+/** Picked in the toolbar's export controls; the file icon in the preview drags out in it. */
+const exportFormat = ref<ExportFormat>(settings.value?.format ?? "png");
 
 /* ---- Keyboard ---- */
 
@@ -830,19 +850,37 @@ onBeforeUnmount(() => {
   <div class="editor">
     <div class="toolbar" @mousedown="onToolbarMouseDown">
       <div class="tool-group">
+        <button
+          class="tool"
+          :class="{ active: tool === ARROW_TOOL.id }"
+          :title="`${ARROW_TOOL.label} (${ARROW_TOOL.key})`"
+          :aria-label="ARROW_TOOL.label"
+          @click="pickTool(ARROW_TOOL.id)"
+        >
+          <Icon :name="ARROW_TOOL.id" />
+        </button>
         <div class="tool-menu" data-menu="shape">
-          <button
-            class="tool menu-trigger"
-            :class="{ active: tool === shapeTool, open: openMenu === 'shape' }"
-            :title="`${currentShapeTool.label} (${currentShapeTool.key}) — more drawing tools`"
-            :aria-label="`Drawing tool: ${currentShapeTool.label}`"
-            aria-haspopup="menu"
-            :aria-expanded="openMenu === 'shape'"
-            @click="onShapeButton"
-          >
-            <Icon :name="shapeTool" />
-            <Icon name="chevron" class="chevron" />
-          </button>
+          <div class="split" :class="{ active: tool === shapeTool }">
+            <button
+              class="tool split-main"
+              :title="`${currentShapeTool.label} (${currentShapeTool.key})`"
+              :aria-label="currentShapeTool.label"
+              @click="pickTool(shapeTool)"
+            >
+              <Icon :name="shapeTool" />
+            </button>
+            <button
+              class="tool split-arrow"
+              :class="{ open: openMenu === 'shape' }"
+              title="More drawing tools"
+              aria-label="More drawing tools"
+              aria-haspopup="menu"
+              :aria-expanded="openMenu === 'shape'"
+              @click="toggleMenu('shape')"
+            >
+              <Icon name="chevron" class="chevron" />
+            </button>
+          </div>
           <div v-if="openMenu === 'shape'" class="menu-pop" role="menu">
             <button
               v-for="t in SHAPE_TOOLS"
@@ -859,17 +897,56 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <button
-          v-for="t in OTHER_TOOLS"
-          :key="t.id"
-          class="tool"
-          :class="{ active: tool === t.id }"
-          :title="`${t.label} (${t.key})`"
-          :aria-label="t.label"
-          @click="pickTool(t.id)"
-        >
-          <Icon :name="t.id" />
-        </button>
+        <template v-for="t in OTHER_TOOLS" :key="t.id">
+          <button
+            class="tool"
+            :class="{ active: tool === t.id }"
+            :title="`${t.label} (${t.key})`"
+            :aria-label="t.label"
+            @click="pickTool(t.id)"
+          >
+            <Icon :name="t.id" />
+          </button>
+          <div v-if="t.id === 'text'" class="tool-menu" data-menu="redact">
+            <div class="split" :class="{ active: tool === 'blur' }">
+              <button
+                class="tool split-main"
+                :title="`${currentRedact.label} (${REDACT_TOOL.key})`"
+                :aria-label="`Redact: ${currentRedact.label}`"
+                @click="pickTool('blur')"
+              >
+                <Icon v-if="redactMode === 'pixelate'" name="blur" />
+                <span v-else class="redact-sample" :class="`redact-${redactMode}`" />
+              </button>
+              <button
+                class="tool split-arrow"
+                :class="{ open: openMenu === 'redact' }"
+                title="More redact styles"
+                aria-label="More redact styles"
+                aria-haspopup="menu"
+                :aria-expanded="openMenu === 'redact'"
+                @click="toggleMenu('redact')"
+              >
+                <Icon name="chevron" class="chevron" />
+              </button>
+            </div>
+            <div v-if="openMenu === 'redact'" class="menu-pop" role="menu">
+              <button
+                v-for="m in REDACT_MODES"
+                :key="m.id"
+                class="menu-item"
+                :class="{ active: tool === 'blur' && redactMode === m.id }"
+                role="menuitemradio"
+                :aria-checked="tool === 'blur' && redactMode === m.id"
+                @click="pickRedact(m.id)"
+              >
+                <Icon v-if="m.id === 'pixelate'" name="blur" />
+                <span v-else class="redact-sample" :class="`redact-${m.id}`" />
+                <span>{{ m.label }}</span>
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
 
       <template v-if="tool === 'crop'">
@@ -1011,10 +1088,8 @@ onBeforeUnmount(() => {
           Reset
         </button>
       </div>
-      <span class="spacer" />
-      <span class="faint" style="font-size: 0.8rem; font-variant-numeric: tabular-nums">
-        {{ outputSize.width }} × {{ outputSize.height }}
-      </span>
+
+      <ExportBar ref="exportBar" v-model:format="exportFormat" :capture="capture" :render="renderPng" :ready="!!image" @copy="copy()" />
     </div>
 
     <div ref="stage" class="stage" @wheel="onWheel">
@@ -1061,9 +1136,10 @@ onBeforeUnmount(() => {
         <button title="Zoom in" @click="setZoom(zoom * 1.25)">+</button>
         <button :class="{ primary: fitMode }" :title="`Fit (${modKey}0)`" @click="fitMode = true; fit()">Fit</button>
         <button title="Actual pixels" @click="setZoom(1)">1:1</button>
+        <span class="zoom-size" title="Image size in pixels, after any crop">{{ outputSize.width }} × {{ outputSize.height }}</span>
       </div>
+      <FileBadge v-if="image" :capture="capture" :render="renderPng" :ready="!!image" :format="exportFormat" />
     </div>
 
-    <ExportBar ref="exportBar" :capture="capture" :render="renderPng" :ready="!!image" @copy="copy()" />
   </div>
 </template>

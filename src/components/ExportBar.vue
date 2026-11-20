@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
@@ -15,7 +15,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ copy: [] }>();
 
-const format = ref<ExportFormat>(settings.value?.format ?? "png");
+/* Shared with the editor, whose draggable file icon exports in this format. */
+const format = defineModel<ExportFormat>("format", { required: true });
 const busy = ref(false);
 
 /* Every new capture starts from the default format in Settings. */
@@ -93,104 +94,124 @@ async function saveAs() {
   }
 }
 
-/* ---- Drag the badge out as a file (like Skitch's drag handle) ---- */
+/* ---- Format menu, styled like the toolbar's menus ---- */
 
-const DRAG_THRESHOLD = 4;
-let press: { x: number; y: number; png: Promise<Uint8Array> } | null = null;
-const dragging = ref(false);
+const formatOpen = ref(false);
+const formatMenu = ref<HTMLElement | null>(null);
 
-function onBadgeDown(event: PointerEvent) {
-  if (event.button !== 0 || !props.ready || busy.value) return;
-  event.preventDefault();
-  /* Start rendering now so the drag can begin the moment the mouse moves. */
-  const png = props.render();
-  png.catch(() => {});
-  press = { x: event.clientX, y: event.clientY, png };
-  window.addEventListener("pointermove", onBadgeMove);
-  window.addEventListener("pointerup", endPress);
-  window.addEventListener("blur", endPress);
+function closeOnOutside(event: PointerEvent) {
+  if (!formatMenu.value?.contains(event.target as Node)) setFormatOpen(false);
 }
 
-function endPress() {
-  press = null;
-  window.removeEventListener("pointermove", onBadgeMove);
-  window.removeEventListener("pointerup", endPress);
-  window.removeEventListener("blur", endPress);
+function closeOnEscape(event: KeyboardEvent) {
+  if (event.key !== "Escape") return;
+  /* Don't let the editor also treat this Escape as "deselect" or "cancel crop". */
+  event.stopPropagation();
+  setFormatOpen(false);
 }
 
-async function onBadgeMove(event: PointerEvent) {
-  if (!press) return;
-  if (!(event.buttons & 1)) return endPress();
-  if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
-  const { png } = press;
-  endPress();
-  dragging.value = true;
-  try {
-    const bytes = await png;
-    await api.dragImage(bytes, { format: format.value, name: props.capture.name });
-  } catch (err) {
-    showToast(errorMessage(err), "error");
-  } finally {
-    dragging.value = false;
+function setFormatOpen(open: boolean) {
+  formatOpen.value = open;
+  if (open) {
+    window.addEventListener("pointerdown", closeOnOutside, true);
+    window.addEventListener("keydown", closeOnEscape, true);
+  } else {
+    window.removeEventListener("pointerdown", closeOnOutside, true);
+    window.removeEventListener("keydown", closeOnEscape, true);
   }
 }
 
-const badgeTitle = computed(() =>
-  props.ready
-    ? `Drag to drop ${props.capture.name}.${format.value} anywhere: the Desktop, a folder, a browser, a chat…`
-    : info.value.note,
-);
+function pickFormat(next: ExportFormat) {
+  if (!supported(next)) return;
+  format.value = next;
+  setFormatOpen(false);
+}
+
+onBeforeUnmount(() => setFormatOpen(false));
+
+/*
+ * The editor toolbar cancels mouse presses so focus stays in a text
+ * annotation being typed. Here that would leave the name field focused (and
+ * outlined) after clicking the format menu or a button, so let it go.
+ */
+const nameInput = ref<HTMLInputElement | null>(null);
+
+function onBarMouseDown(event: MouseEvent) {
+  if (event.target !== nameInput.value && document.activeElement === nameInput.value) nameInput.value?.blur();
+}
 
 defineExpose({ save, saveAs });
 </script>
 
 <template>
-  <div class="export-bar">
+  <div class="export-bar" @mousedown="onBarMouseDown">
     <div class="export-fields">
       <div class="export-name">
         <input
+          ref="nameInput"
           v-model="capture.name"
           type="text"
           spellcheck="false"
           aria-label="File name"
           @keydown.enter="save"
         />
-        <select v-model="format" aria-label="File format" :title="info.note">
-          <option v-for="f in ALL_FORMATS" :key="f" :value="f" :disabled="!supported(f)">
-            .{{ f }}{{ supported(f) ? "" : " (unavailable)" }}
-          </option>
-        </select>
+        <div ref="formatMenu" class="format-menu">
+          <button
+            class="format-trigger"
+            :class="{ open: formatOpen }"
+            :title="info.note"
+            aria-label="File format"
+            aria-haspopup="menu"
+            :aria-expanded="formatOpen"
+            @click="setFormatOpen(!formatOpen)"
+          >
+            .{{ format }}
+            <Icon name="chevron" class="chevron" />
+          </button>
+          <div v-if="formatOpen" class="menu-pop format-pop" role="menu">
+            <span class="menu-label">Format</span>
+            <button
+              v-for="f in ALL_FORMATS"
+              :key="f"
+              class="menu-item"
+              :class="{ active: format === f }"
+              role="menuitemradio"
+              :aria-checked="format === f"
+              :disabled="!supported(f)"
+              :title="supported(f) ? FORMAT_INFO[f].note : 'Not available on this system'"
+              @click="pickFormat(f)"
+            >
+              <span class="format-chip" :style="{ background: FORMAT_INFO[f].color }">{{ FORMAT_INFO[f].label }}</span>
+              <span class="format-note">{{ supported(f) ? FORMAT_INFO[f].note : "Not available" }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="export-actions">
-      <button :disabled="!ready" :title="`Copy to clipboard (${modKey}C)`" @click="emit('copy')">
-        <Icon name="copy" /> Copy
+      <button
+        class="icon-only"
+        :disabled="!ready"
+        :title="`Copy to clipboard (${modKey}C)`"
+        aria-label="Copy to clipboard"
+        @click="emit('copy')"
+      >
+        <Icon name="copy" />
       </button>
-      <button :disabled="!ready || busy" :title="`Save As (${modKey}⇧S)`" @click="saveAs">
-        <Icon name="saveAs" /> Save As…
+      <button
+        class="icon-only"
+        :disabled="!ready || busy"
+        :title="`Save As… (${modKey}⇧S)`"
+        aria-label="Save As"
+        @click="saveAs"
+      >
+        <Icon name="saveAs" />
       </button>
       <button class="primary" :disabled="!ready || busy" :title="`Save (${modKey}S)`" @click="save">
-        <Icon name="save" /> Save
+        Save
       </button>
     </div>
 
-    <div
-      class="file-badge"
-      :class="{ draggable: ready, dragging }"
-      :title="badgeTitle"
-      role="button"
-      :aria-label="`Drag out as ${capture.name}.${format}`"
-      @pointerdown="onBadgeDown"
-      @dragstart.prevent
-    >
-      <svg viewBox="0 0 40 48" aria-hidden="true">
-        <path d="M6 2h20l10 10v32a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5" />
-        <path d="M26 2v8a2 2 0 0 0 2 2h8" fill="none" stroke="var(--border)" stroke-width="1.5" />
-        <path d="M10 28l6-6 5 5 3-3 6 6" fill="none" stroke="var(--text-faint)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="25" cy="18" r="2" fill="var(--text-faint)" />
-      </svg>
-      <span :style="{ background: info.color }">{{ info.label }}</span>
-    </div>
   </div>
 </template>

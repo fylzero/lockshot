@@ -19,10 +19,15 @@ interface Base {
   id: number;
 }
 
+/** How the redact tool hides an area: pixelated, or a solid white or black box. */
+export type RedactMode = "pixelate" | "white" | "black";
+
 export interface SegmentShape extends Base {
   kind: "arrow" | "line" | "rect" | "ellipse" | "blur";
   color: string;
   width: number;
+  /** Redact only. Missing on shapes made before the option existed; treated as "pixelate". */
+  redact?: RedactMode;
   x1: number;
   y1: number;
   x2: number;
@@ -240,23 +245,67 @@ function strokePoints(ctx: CanvasRenderingContext2D, points: number[]) {
   ctx.stroke();
 }
 
-const pixelCanvas = document.createElement("canvas");
+/* Scratch canvases for pixelate, reused so redrawing while dragging stays cheap. */
+const scratch = [document.createElement("canvas"), document.createElement("canvas")];
+
+/** Resize scratch canvas `i` and draw `from` (a rect of `src`) to fill it. */
+function resample(i: number, src: CanvasImageSource, from: Rect, w: number, h: number) {
+  const c = scratch[i];
+  if (c.width !== w || c.height !== h) {
+    c.width = w;
+    c.height = h;
+  }
+  const g = c.getContext("2d")!;
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = "high";
+  g.clearRect(0, 0, w, h);
+  g.drawImage(src, from.x, from.y, from.w, from.h, 0, 0, w, h);
+  return c;
+}
 
 function drawBlur(ctx: CanvasRenderingContext2D, s: SegmentShape, source: CanvasImageSource) {
   const r = normalize(s.x1, s.y1, s.x2, s.y2);
   if (r.w < 1 || r.h < 1) return;
-  /* Blocks need to be at least a line of text tall to actually hide it. */
-  const block = Math.max(10, s.width * 4.5);
-  const w = Math.max(1, Math.round(r.w / block));
-  const h = Math.max(1, Math.round(r.h / block));
-  pixelCanvas.width = w;
-  pixelCanvas.height = h;
-  const pctx = pixelCanvas.getContext("2d")!;
-  pctx.imageSmoothingEnabled = true;
-  pctx.drawImage(source, r.x, r.y, r.w, r.h, 0, 0, w, h);
+  if (s.redact === "white" || s.redact === "black") {
+    ctx.fillStyle = s.redact === "white" ? "#ffffff" : "#000000";
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    return;
+  }
+  /*
+   * Adaptive blocks: a small box over a word gets fine blocks, and blocks
+   * grow with the covered area so a large region is still fully scrambled.
+   * Half the size setting (the stroke width) is the floor, so a small box
+   * starts out fine.
+   */
+  const block = Math.max(3, s.width / 2, Math.sqrt(r.w * r.h) / 12);
+  const area: Rect = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) };
+  if (area.w < 1 || area.h < 1) return;
+  const gw = Math.max(1, Math.round(area.w / block));
+  const gh = Math.max(1, Math.round(area.h / block));
+
+  /*
+   * Shrink by halves down to one pixel per block. A single big drawImage
+   * downscale only samples a few source pixels per block, which gives noisy,
+   * flickery colors; halving averages every pixel, so each block is the true
+   * mean of what it covers and the shapes underneath still read as shapes.
+   */
+  let w = area.w;
+  let h = area.h;
+  let cur: CanvasImageSource = source;
+  let from = area;
+  let i = 0;
+  do {
+    w = Math.max(gw, Math.ceil(w / 2));
+    h = Math.max(gh, Math.ceil(h / 2));
+    cur = resample(i, cur, from, w, h);
+    from = { x: 0, y: 0, w, h };
+    i ^= 1;
+  } while (w > gw || h > gh);
+
+  /* Blow the blocks back up with no smoothing, for crisp square edges. */
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(pixelCanvas, 0, 0, w, h, r.x, r.y, r.w, r.h);
+  ctx.drawImage(cur, 0, 0, gw, gh, area.x, area.y, area.w, area.h);
   ctx.restore();
 }
 
