@@ -74,13 +74,45 @@ const OUTLINES: { id: TextOutline; label: string }[] = [
   { id: "none", label: "None" },
 ];
 
-const tool = ref<Tool>("arrow");
-const shapeTool = ref<Tool>("line");
-const color = ref(COLORS[0]);
-/* Medium: bold enough to read at a glance on a full-screen capture. */
-const sizeIndex = ref(2);
+/* The last tool, color, size and redact mode picked, kept across restarts. */
+const STYLE_KEY = "editorStyle";
+function readStoredStyle() {
+  let saved: Record<string, unknown> = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(STYLE_KEY) ?? "{}") ?? {};
+  } catch {
+    /* fall back to the defaults */
+  }
+  const size = saved.size as number;
+  return {
+    /* Crop is a one-off mode, so it never comes back on launch. */
+    tool: TOOLS.find((t) => t.id === saved.tool && t.id !== "crop")?.id ?? null,
+    shapeTool: SHAPE_TOOLS.find((t) => t.id === saved.shapeTool)?.id ?? null,
+    color: typeof saved.color === "string" && /^#[0-9a-f]{6}$/i.test(saved.color) ? saved.color : null,
+    size: Number.isInteger(size) && size >= 0 && size < SIZES.length ? size : null,
+    redact: REDACT_MODES.find((m) => m.id === saved.redact)?.id ?? null,
+  };
+}
+const storedStyle = readStoredStyle();
+const tool = ref<Tool>(storedStyle.tool ?? "arrow");
+const shapeTool = ref<Tool>(storedStyle.shapeTool ?? "line");
+const color = ref<string>(storedStyle.color ?? COLORS[0]);
+/* Medium by default: bold enough to read at a glance on a full-screen capture. */
+const sizeIndex = ref<number>(storedStyle.size ?? 2);
 const textOutline = ref<TextOutline>("auto");
-const redactMode = ref<RedactMode>("pixelate");
+const redactMode = ref<RedactMode>(storedStyle.redact ?? "pixelate");
+watch([tool, shapeTool, color, sizeIndex, redactMode], ([t, shape, c, size, redact], [prevTool]) => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STYLE_KEY) ?? "{}") ?? {};
+    /* Leave the saved tool alone while cropping. */
+    localStorage.setItem(
+      STYLE_KEY,
+      JSON.stringify({ tool: t === "crop" ? (saved.tool ?? prevTool) : t, shapeTool: shape, color: c, size, redact }),
+    );
+  } catch {
+    /* only a convenience: the defaults still work */
+  }
+});
 const shapes = shallowRef<Shape[]>([]);
 const crop = ref<Rect | null>(null);
 /** The crop being drawn while the Crop tool is on; Apply commits it. */
@@ -105,8 +137,12 @@ const fitMode = ref(true);
 
 const width = computed(() => image.value?.width ?? 0);
 const height = computed(() => image.value?.height ?? 0);
-/** Annotation sizes scale with the capture so they read the same on Retina and 1x shots. */
-const unit = computed(() => Math.max(1, Math.min(width.value, height.value) / 600));
+/**
+ * Image pixels per size unit. SIZES are in screen points, so at 100% zoom an
+ * annotation is the same size on every capture, large or small, Retina or 1x.
+ * It must not depend on the capture's dimensions or the zoom level.
+ */
+const unit = dpr;
 const cssScale = computed(() => zoom.value / dpr);
 /** The part of the image on screen: the applied crop, or all of it while cropping. */
 const view = computed<Rect>(() =>
@@ -124,7 +160,7 @@ const showOutline = computed(
 );
 
 function sizeFor(kind: "stroke" | "text" | "step") {
-  return Math.round(SIZES[sizeIndex.value][kind] * unit.value);
+  return Math.round(SIZES[sizeIndex.value][kind] * unit);
 }
 
 /* ---- Loading ---- */
@@ -548,7 +584,7 @@ function restyleSelected(change: { color?: string; size?: number; outline?: Text
   const t = editing.value;
   if (t) {
     if (change.color) t.color = change.color;
-    if (change.size != null) t.size = Math.round(SIZES[change.size].text * unit.value);
+    if (change.size != null) t.size = Math.round(SIZES[change.size].text * unit);
     if (change.outline) t.outline = change.outline;
     return;
   }
@@ -562,9 +598,9 @@ function restyleSelected(change: { color?: string; size?: number; outline?: Text
       if (change.redact && next.kind === "blur") next.redact = change.redact;
       if (change.size != null) {
         const size = SIZES[change.size];
-        if (next.kind === "text") next.size = Math.round(size.text * unit.value);
-        else if (next.kind === "step") next.size = Math.round(size.step * unit.value);
-        else next.width = Math.round(size.stroke * unit.value);
+        if (next.kind === "text") next.size = Math.round(size.text * unit);
+        else if (next.kind === "step") next.size = Math.round(size.step * unit);
+        else next.width = Math.round(size.stroke * unit);
       }
       return next;
     }),

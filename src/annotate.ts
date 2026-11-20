@@ -213,7 +213,8 @@ function drawArrow(ctx: CanvasRenderingContext2D, s: SegmentShape) {
   const length = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
   const head = Math.min(Math.max(s.width * 4, 12), length * 0.6 || 12);
   const spread = Math.PI / 7;
-  /* Stop the shaft inside the head so its square end never pokes out. */
+  /* Stop the shaft inside the head so its round cap stays hidden there; the
+     tail keeps its round cap, matching the line tool. */
   const shaftEnd = Math.max(0, length - head * 0.8);
   ctx.beginPath();
   ctx.moveTo(s.x1, s.y1);
@@ -321,7 +322,6 @@ export function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, source: C
     case "arrow":
       ctx.strokeStyle = ctx.fillStyle = shape.color;
       ctx.lineWidth = shape.width;
-      ctx.lineCap = "butt";
       drawArrow(ctx, shape);
       break;
     case "line":

@@ -7,6 +7,15 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.1.0",
+    date: "November 20, 2026",
+    notes: [
+      "Annotations are the same size on every screenshot. A size looks the same at 1:1 zoom whether the capture is a small area or a full Retina screen, instead of growing with the image.",
+      "The back end of an arrow is rounded, like the Line tool.",
+      "The editor remembers your tool, shape, color, size and Redact style after you quit and reopen Lockshot.",
+    ],
+  },
+  {
     version: "1.0.0",
     date: "November 20, 2026",
     notes: [
