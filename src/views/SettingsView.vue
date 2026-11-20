@@ -14,7 +14,7 @@ import { api, errorMessage } from "../api";
 import { env, saveSettingsSoon, settings, showToast, systemShortcuts } from "../store";
 import { ALL_FORMATS, FORMAT_INFO } from "../formats";
 import { DEFAULT_TEMPLATE, FILENAME_TOKENS, formatFilename } from "../filename";
-import { HOTKEY_ACTIONS, formatAccelerator, systemClashes, systemPreset } from "../hotkeys";
+import { HOTKEY_ACTIONS, formatAccelerator, pcKeyboardPreset, systemClashes, systemPreset } from "../hotkeys";
 import { THEME_OPTIONS } from "../theme";
 import { fileManagerName, modKey } from "../platform";
 import type { HotkeyAction } from "../types";
@@ -82,18 +82,22 @@ async function resetHotkeys() {
 }
 
 const preset = computed(() => systemPreset(env.os));
+const pcPreset = computed(() => pcKeyboardPreset(env.os));
 const clashCount = computed(() => systemClashes(settings.value?.hotkeys, systemShortcuts.value).length);
 
-async function applyPreset() {
-  if (!preset.value) return;
-  for (const [action, accelerator] of Object.entries(preset.value.hotkeys)) {
+async function applyPreset(which = preset.value) {
+  if (!which) return;
+  for (const [action, accelerator] of Object.entries(which.hotkeys)) {
     await setHotkey(action as HotkeyAction, accelerator);
     if (hotkeyError.value) return;
   }
+  const os = env.os === "macos" ? "macOS" : "Windows";
   showToast(
     clashCount.value
-      ? "Almost there: turn off macOS's own screenshot shortcuts, as shown at the top."
-      : "Now using the system screenshot keys.",
+      ? `Almost there: turn off ${os}'s own screenshot shortcut, as shown at the top.`
+      : which === pcPreset.value
+        ? "Now using PrtSc on your PC keyboard."
+        : "Now using the system screenshot keys.",
   );
 }
 
@@ -384,7 +388,8 @@ const EDITOR_KEYS = [
               <small>Defaults: area {{ formatAccelerator("Alt+Shift+4", env.os) }}, screen {{ formatAccelerator("Alt+Shift+3", env.os) }}, open {{ formatAccelerator("Alt+Shift+L", env.os) }}</small>
             </div>
             <div class="row-control">
-              <button v-if="preset" @click="applyPreset">{{ preset.label }}</button>
+              <button v-if="preset" @click="applyPreset(preset)">{{ preset.label }}</button>
+              <button v-if="pcPreset" @click="applyPreset(pcPreset)">{{ pcPreset.label }}</button>
               <button @click="resetHotkeys"><Icon name="reset" /> Reset to defaults</button>
             </div>
           </div>
@@ -401,6 +406,11 @@ const EDITOR_KEYS = [
                   <li>Click <strong>Screenshots</strong> in the list on the left, untick the shortcuts you want Lockshot to have, and click <strong>Done</strong>.</li>
                   <li>Come back here and click <strong>{{ preset?.label }}</strong>.</li>
                 </ol>
+                <p class="muted">
+                  Using a PC keyboard? macOS sees its <kbd>PrtSc</kbd> key as <kbd>F13</kbd>, which nothing else uses,
+                  so click <strong>{{ pcPreset?.label }}</strong> above: <kbd>PrtSc</kbd> captures an area and
+                  <kbd>Shift</kbd>+<kbd>PrtSc</kbd> the whole screen. No system settings to change.
+                </p>
               </template>
               <template v-else-if="env.os === 'windows'">
                 Windows sends <kbd>PrtSc</kbd> to the Snipping Tool by default. To hand it to Lockshot:

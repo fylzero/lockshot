@@ -20,9 +20,54 @@ pub struct HotkeyState {
 }
 
 pub fn parse(accelerator: &str) -> Result<Shortcut, String> {
-    accelerator
+    native(accelerator)
         .parse::<Shortcut>()
         .map_err(|err| format!("\"{accelerator}\" is not a shortcut Lockshot understands: {err}"))
+}
+
+/**
+ * The accelerator as this OS's keyboard sends it. macOS has no Print Screen
+ * key: a PC keyboard's PrtSc arrives as F13, while global-hotkey registers
+ * "PrintScreen" as a key code nothing ever sends. So on macOS a PrtSc
+ * binding (say, one copied from Windows) is registered as F13, and the two
+ * count as the same shortcut.
+ */
+fn native(accelerator: &str) -> std::borrow::Cow<'_, str> {
+    if !cfg!(target_os = "macos") {
+        return accelerator.into();
+    }
+    match accelerator.rsplit_once('+') {
+        Some((mods, key)) if is_print_screen(key) => format!("{mods}+F13").into(),
+        None if is_print_screen(accelerator) => "F13".into(),
+        _ => accelerator.into(),
+    }
+}
+
+fn is_print_screen(key: &str) -> bool {
+    ["PrintScreen", "PrtSc", "Print"]
+        .iter()
+        .any(|name| key.eq_ignore_ascii_case(name))
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn print_screen_is_f13_on_macos() {
+        assert_eq!(
+            parse("PrintScreen").unwrap().id(),
+            parse("F13").unwrap().id()
+        );
+        assert_eq!(
+            parse("Shift+PrintScreen").unwrap().id(),
+            parse("Shift+F13").unwrap().id()
+        );
+        assert_eq!(
+            parse("Alt+Shift+4").unwrap().id(),
+            parse("Shift+Alt+4").unwrap().id()
+        );
+    }
 }
 
 pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {

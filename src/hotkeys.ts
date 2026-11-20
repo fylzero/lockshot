@@ -94,6 +94,15 @@ export function systemPreset(os: OsName): { label: string; hotkeys: Partial<Reco
   return { label: "Use PrtSc / Shift+PrtSc", hotkeys: { area: "PrintScreen", screen: "Shift+PrintScreen" } };
 }
 
+/**
+ * For a PC keyboard on a Mac. macOS has no Print Screen key and hands the PC
+ * keyboard's PrtSc over as F13, so that's what Lockshot listens for.
+ */
+export function pcKeyboardPreset(os: OsName): { label: string; hotkeys: Partial<Record<HotkeyAction, string>> } | null {
+  if (os !== "macos") return null;
+  return { label: "Use PrtSc (PC keyboard)", hotkeys: { area: "F13", screen: "Shift+F13" } };
+}
+
 const MODIFIER_ALIASES: Record<string, string> = {
   control: "ctrl", ctrl: "ctrl", alt: "alt", option: "alt", shift: "shift",
   cmd: "cmd", command: "cmd", super: "cmd", meta: "cmd", commandorcontrol: "cmd", cmdorctrl: "cmd",
@@ -102,7 +111,8 @@ const MODIFIER_ALIASES: Record<string, string> = {
 /** An accelerator in one canonical form, so "Shift+Cmd+4" equals "Cmd+Shift+4". */
 function canonical(accelerator: string) {
   const parts = accelerator.split("+").filter(Boolean);
-  const key = (parts.pop() ?? "").toLowerCase();
+  let key = (parts.pop() ?? "").toLowerCase();
+  if (key === "prtsc" || key === "print") key = "printscreen";
   const mods = parts.map((p) => MODIFIER_ALIASES[p.toLowerCase()] ?? p.toLowerCase()).sort();
   return [...mods, key].join("+");
 }

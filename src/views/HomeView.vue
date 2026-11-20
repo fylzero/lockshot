@@ -6,7 +6,7 @@ import HotkeyRecorder from "../components/HotkeyRecorder.vue";
 import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
 import { env, openImageFile, saveSettingsSoon, settings, showToast } from "../store";
-import { acceleratorKeys, systemPreset } from "../hotkeys";
+import { acceleratorKeys, pcKeyboardPreset, systemPreset } from "../hotkeys";
 import type { HotkeyAction, PermissionStatus } from "../types";
 
 /*
@@ -72,12 +72,13 @@ async function setHotkey(action: HotkeyAction, accelerator: string) {
 }
 
 const preset = computed(() => systemPreset(env.os));
+const pcPreset = computed(() => pcKeyboardPreset(env.os));
 
 /* One click to the system screenshot keys; if macOS still owns them, the
    notice below appears with the steps to free them. */
-async function usePreset() {
-  if (!preset.value) return;
-  for (const [action, accelerator] of Object.entries(preset.value.hotkeys)) {
+async function usePreset(which = preset.value) {
+  if (!which) return;
+  for (const [action, accelerator] of Object.entries(which.hotkeys)) {
     if (!(await setHotkey(action as HotkeyAction, accelerator))) return;
   }
 }
@@ -121,8 +122,12 @@ async function usePreset() {
             </div>
             <p class="muted" style="margin: 0.6rem 0 0; font-size: 0.85rem">
               Want {{ env.os === "macos" ? "⌘⇧4" : "PrtSc" }} instead?
-              <button v-if="env.os === 'macos' && preset" class="link" @click="usePreset">Use ⌘⇧4 and ⌘⇧3 for Lockshot.</button>
+              <button v-if="env.os === 'macos' && preset" class="link" @click="usePreset(preset)">Use ⌘⇧4 and ⌘⇧3 for Lockshot.</button>
               <RouterLink v-else to="/settings/hotkeys">See how to take over the system keys.</RouterLink>
+            </p>
+            <p v-if="pcPreset" class="muted" style="margin: 0.3rem 0 0; font-size: 0.85rem">
+              On a PC keyboard?
+              <button class="link" @click="usePreset(pcPreset)">Use PrtSc and Shift+PrtSc.</button>
             </p>
             <SystemShortcutNotice style="margin: 0.8rem 0 0" />
             <p v-if="env.os === 'linux'" class="muted" style="margin: 0.6rem 0 0; font-size: 0.85rem">

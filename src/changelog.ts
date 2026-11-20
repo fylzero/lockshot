@@ -22,6 +22,8 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Thicker default annotation sizes, a new Extra large size, and a new color set with pink as default.",
       "Settings has a JSON page for editing, importing and exporting settings.json.",
       "If macOS's own screenshot shortcuts still own a Lockshot hotkey, Lockshot says so and can turn them off for you, with Undo.",
+      "On a Mac with a PC keyboard, PrtSc can be your capture key: click Use PrtSc (PC keyboard) in Settings → Hotkeys for PrtSc (area) and Shift+PrtSc (screen).",
+      "On Windows 11, if the Snipping Tool still owns PrtSc, Lockshot says so and opens the setting to turn it off.",
       "Lockshot starts at login. Turn it off in Settings → General.",
       "Setup's Screen Recording step and the Home tab icon are tidied up.",
     ],

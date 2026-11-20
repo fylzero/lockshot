@@ -6,8 +6,9 @@ import { env, refreshSystemShortcuts, settings, showToast, systemShortcuts } fro
 import { formatAccelerator, HOTKEY_ACTIONS, systemClashes } from "../hotkeys";
 
 /*
- * Shown wherever hotkeys are picked when one of them is still owned by
- * macOS's own screenshot shortcuts. macOS accepts the registration but its
+ * Shown wherever hotkeys are picked when one of them is still owned by the
+ * OS's own screenshot shortcuts: macOS's, or the Snipping Tool's PrtSc on
+ * Windows. On macOS: macOS accepts the registration but its
  * own shortcut wins, so without this the key just opens the system tool and
  * Lockshot looks broken. It walks through freeing the key, and disappears
  * on its own once the shortcut is off (the list refreshes when Lockshot comes
@@ -22,6 +23,8 @@ const busy = ref(false);
 function actionLabel(id: string) {
   return HOTKEY_ACTIONS.find((a) => a.id === id)?.label ?? id;
 }
+
+const windows = computed(() => env.os === "windows");
 
 async function openShortcuts() {
   try {
@@ -75,7 +78,24 @@ async function checkAgain() {
 </script>
 
 <template>
-  <div v-if="clashes.length" class="notice system-clash" role="alert">
+  <div v-if="clashes.length && windows" class="notice system-clash" role="alert">
+    <Icon name="info" />
+    <div>
+      <strong><kbd>{{ keys[0] }}</kbd> may open the Snipping Tool, not Lockshot</strong>
+      <p class="muted">Windows hands the Print Screen key to the Snipping Tool while this setting is on. To give it to Lockshot:</p>
+      <ol class="steps">
+        <li>Click <strong>Open keyboard settings</strong> below (Settings › Accessibility › Keyboard).</li>
+        <li>Turn off <strong>{{ clashes[0].system.label }}</strong>.</li>
+        <li>If OneDrive or Dropbox also claims <kbd>PrtSc</kbd>, turn that off in their settings too.</li>
+      </ol>
+      <p class="muted">This message goes away once it's off. If <kbd>PrtSc</kbd> still opens the Snipping Tool, sign out and back in.</p>
+      <div class="notice-actions">
+        <button class="primary" @click="openShortcuts"><Icon name="external" /> Open keyboard settings</button>
+        <button :disabled="checking" @click="checkAgain">Check again</button>
+      </div>
+    </div>
+  </div>
+  <div v-else-if="clashes.length" class="notice system-clash" role="alert">
     <Icon name="info" />
     <div>
       <strong>
