@@ -7,12 +7,18 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
-    version: "0.2.1",
+    version: "0.3.0",
     date: "November 20, 2026",
     notes: [
       "The Home tab shows the same Lockshot icon as the menu bar instead of a house, and is a little wider so it's easier to click.",
       "Setup's Screen Recording step is a single, roomier card. Allow access and Relaunch Lockshot sit side by side, and Open System Settings is a link in the steps.",
       "Settings has a JSON page for editing settings.json directly, with line numbers and highlighting. Save checks everything first and points to the line with a problem. Import loads a settings file to look over before saving, Export writes your settings to a file, and Reveal shows where the file lives.",
+      "The editor has no separate Select tool: click any annotation to select it, and drag it to move it, whichever tool you're using. With the Text tool, clicking text edits it.",
+      "Arrow, Line, Rectangle, Ellipse, Pen, Highlighter and Numbered step share one toolbar button showing the tool you picked; click it to choose another. Color and size are single buttons too, each opening a small menu.",
+      "Drag the dot on the corner of a text box up or down to resize the text. A new Text outline menu picks a black, white or no outline, or Automatic as before.",
+      "Crop has an Apply button (or press Enter). Once applied, the editor shows just the cropped image; pick Crop again to adjust it, or Cancel (Esc) to leave it as it was.",
+      "Annotations start out thicker: the old Large size is now the default, Medium. The sizes are Extra small, Small, Medium, Large and a new, thicker Extra large (keys 1 to 5), so the old Small is now Extra small.",
+      "A new set of annotation colors: pink (the new default), red, orange, yellow, green, teal, purple, white and black. The custom color picker is still at the end.",
     ],
   },
   {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /* Stroke icons on a 24px grid, drawn in currentColor. */
 const PATHS: Record<string, string> = {
-  select: "M5 3l13 8-6 1.5L9 19z",
+  chevron: "M7 10l5 5 5-5",
   arrow: "M5 19L19 5M10 5h9v9",
   line: "M5 19L19 5",
   rect: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z",

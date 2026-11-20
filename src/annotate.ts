@@ -4,7 +4,6 @@
  */
 
 export type Tool =
-  | "select"
   | "arrow"
   | "line"
   | "rect"
@@ -37,10 +36,15 @@ export interface StrokeShape extends Base {
   points: number[];
 }
 
+/** "auto" picks black or white, whichever stands out against the text color. */
+export type TextOutline = "auto" | "black" | "white" | "none";
+
 export interface TextShape extends Base {
   kind: "text";
   color: string;
   size: number;
+  /** Missing on shapes made before the option existed; treated as "auto". */
+  outline?: TextOutline;
   x: number;
   y: number;
   text: string;
@@ -82,6 +86,23 @@ export function contrastColor(color: string) {
   if (Number.isNaN(n)) return "#000";
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#000" : "#fff";
+}
+
+export function textOutlineColor(shape: Pick<TextShape, "color" | "outline">) {
+  switch (shape.outline ?? "auto") {
+    case "black":
+      return "#000";
+    case "white":
+      return "#fff";
+    case "none":
+      return null;
+    default:
+      return contrastColor(shape.color);
+  }
+}
+
+export function textOutlineWidth(size: number) {
+  return Math.max(2, size / 7);
 }
 
 const measureCtx = document.createElement("canvas").getContext("2d")!;
@@ -299,12 +320,13 @@ export function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, source: C
     case "text": {
       ctx.font = `700 ${shape.size}px ${TEXT_FONT}`;
       ctx.textBaseline = "top";
-      ctx.lineWidth = Math.max(2, shape.size / 7);
-      ctx.strokeStyle = contrastColor(shape.color);
+      const outline = textOutlineColor(shape);
+      ctx.lineWidth = textOutlineWidth(shape.size);
+      if (outline) ctx.strokeStyle = outline;
       ctx.fillStyle = shape.color;
       textLines(shape).forEach((line, i) => {
         const y = shape.y + i * shape.size * TEXT_LINE_HEIGHT + shape.size * 0.1;
-        ctx.strokeText(line, shape.x, y);
+        if (outline) ctx.strokeText(line, shape.x, y);
         ctx.fillText(line, shape.x, y);
       });
       break;
