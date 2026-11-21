@@ -8,9 +8,13 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
 }
 const { getCurrentWindow } = await import("@tauri-apps/api/window");
 
-/* Capture overlays and the save notice share the bundle but mount pages of their own. */
+/* Capture overlays, the save notice and the scrolling border share the bundle but mount pages of their own. */
 const label = getCurrentWindow().label;
-if (label.startsWith("overlay-")) {
+if (label.startsWith("frame-")) {
+  /* A strip of the border around a Scrolling Capture's area: just colour. */
+  document.documentElement.style.background = "#fff";
+  document.body.style.cssText = "margin:0;height:100vh;background:#fff;box-shadow:inset 0 0 0 1px rgb(0 0 0 / 0.45)";
+} else if (label.startsWith("overlay-")) {
   const { default: Overlay } = await import("./Overlay.vue");
   createApp(Overlay).mount("#app");
 } else if (label === "toast") {

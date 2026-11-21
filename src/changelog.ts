@@ -7,9 +7,11 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
-    version: "1.2.1",
+    version: "1.3.0",
     date: "November 21, 2026",
     notes: [
+      "Scrolling Capture selects an area instead of a window. Drag over the part of the screen to scroll, like a chat thread or a web page, or click for the whole screen. Lockshot scrolls the middle of it and saves just that area as pages, a long image or text, as before. A white border frames the area while it runs, and the progress notice keeps out of it, so neither lands in the pages.",
+      "On macOS and Windows the mouse pointer is locked in place while Scrolling Capture runs, so bumping the mouse no longer ends it early. Press Esc or the scrolling hotkey again to stop.",
       "Selected text in a text box keeps its color while you edit it, with a light highlight behind it, instead of turning white and blending into a white outline.",
       "Selected text now shows a resize dot on its lower-right corner, so you can make it bigger or smaller without opening it for editing first.",
       "Home has an Open screenshot folder link under Open image… that opens the folder your captures go to in Finder, File Explorer or your file manager. The folder settings have an Open button too.",

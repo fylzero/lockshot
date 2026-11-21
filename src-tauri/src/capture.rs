@@ -2,7 +2,8 @@
 //! borderless overlay per monitor showing that frozen image, so the selection
 //! is drawn over exactly what gets cropped and the overlays themselves never
 //! end up in the shot. Capture Window uses the same overlays to pick a
-//! window, then captures that window on its own.
+//! window, then captures that window on its own, and Scrolling Capture uses
+//! them to select the part of the screen it scrolls.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -75,7 +76,7 @@ pub enum OverlayMode {
     Area,
     /// Click the window to capture.
     Window,
-    /// Click the part of a window to scroll and capture page by page.
+    /// Select the part of the screen to scroll and capture page by page.
     Scroll,
 }
 
@@ -351,7 +352,7 @@ pub fn start_window(app: &AppHandle) -> Result<(), String> {
 }
 
 /**
- * Scrolling Capture: let the user click the part of a window to scroll. It
+ * Scrolling Capture: let the user select the part of the screen to scroll. It
  * needs to move the pointer and scroll, which macOS gates behind
  * Accessibility and Wayland does not allow. The hotkey pressed again while
  * one is running stops it.
@@ -380,7 +381,7 @@ fn start_overlays(app: &AppHandle, mode: OverlayMode) -> Result<(), String> {
     ensure_permission(app)?;
     cancel_area(app);
 
-    let windows = if mode != OverlayMode::Area {
+    let windows = if mode == OverlayMode::Window {
         window_list::all()
     } else {
         Vec::new()
@@ -545,35 +546,41 @@ pub fn finish_window(
 }
 
 /**
- * Scrolling Capture: the user clicked a spot inside a window. `x` and `y`
- * are fractions of the display the overlay covered.
+ * Scrolling Capture: the user selected the part of the screen to scroll, as
+ * fractions of the display the overlay covered, or clicked for all of it.
  */
 pub fn finish_scroll(
     app: &AppHandle,
     label: &str,
     session_id: &str,
-    window_id: u32,
-    x: f64,
-    y: f64,
+    rect: Option<Rect>,
 ) -> Result<(), String> {
     let shot = take_shot(app, label, session_id)?;
     close_overlays(app);
-    let target = shot
-        .windows
-        .iter()
-        .find(|w| w.id == window_id)
-        .ok_or("That window is no longer available.")?;
+    let rect = rect.unwrap_or(Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+    });
     let b = shot.bounds;
     let (bw, bh) = (b.width as f64, b.height as f64);
+    let left = (rect.x.clamp(0.0, 1.0) * bw).round() as u32;
+    let top = (rect.y.clamp(0.0, 1.0) * bh).round() as u32;
+    let right = (((rect.x + rect.width).clamp(0.0, 1.0) * bw).round() as u32).min(b.width);
+    let bottom = (((rect.y + rect.height).clamp(0.0, 1.0) * bh).round() as u32).min(b.height);
+    if right < left + 8 || bottom < top + 8 {
+        return Err("Select a larger area to scroll.".into());
+    }
+    crate::quick_save::set_avoid(app, Some((rect.x, rect.y, rect.width, rect.height)));
     crate::scrolling::start(
         app,
         crate::scrolling::Target {
-            window_id,
-            point: (
-                (b.x as f64 + x.clamp(0.0, 1.0) * bw).round() as i32,
-                (b.y as f64 + y.clamp(0.0, 1.0) * bh).round() as i32,
-            ),
-            window_height: target.height * bh,
+            display: (b.x, b.y),
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top,
         },
     )
 }

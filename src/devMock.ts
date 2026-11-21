@@ -41,9 +41,9 @@ function sampleImage() {
   return URL.createObjectURL(new Blob([raw]));
 }
 
-/** #toast, #toast-error, #toast-scrolling (in progress) or #toast-scrolled (done). */
+/** #toast, #toast-error, #toast-scrolling (in progress; #toast-scrolling-unlocked on Linux, #toast-scrolling-saving once stopped) or #toast-scrolled (done). */
 function sampleToast(kind: string) {
-  const none = { pages: null, running: false, note: null, title: null };
+  const none = { pages: null, running: false, pointerLocked: false, saving: false, note: null, title: null };
   if (kind.includes("error")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail: null, copied: false,
       error: "Could not write the image: Permission denied (os error 13)", ...none };
@@ -63,12 +63,13 @@ function sampleToast(kind: string) {
   const thumbnail = { width, height, data: Array.from(g.getImageData(0, 0, width, height).data) };
   if (kind.includes("scrolling")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail, copied: false, error: null,
-      pages: 12, running: true, note: null, title: null };
+      pages: 12, running: true, pointerLocked: !kind.includes("unlocked"),
+      saving: kind.includes("saving"), note: kind.includes("saving") ? "Stopped" : null, title: null };
   }
   if (kind.includes("scrolled")) {
     return { id: "t1", capture: null, path: "/Users/demo/Pictures/Screenshot-2026-11-20-18.04.29 Scrolling",
       fileName: "Screenshot-2026-11-20-18.04.29 Scrolling", thumbnail, copied: false, error: null,
-      pages: 37, running: false, note: "Reached the end", title: "Saved 37 pages, a long image and the text" };
+      pages: 37, running: false, pointerLocked: false, saving: false, note: "Reached the end", title: "Saved 37 pages, a long image and the text" };
   }
   return {
     ...none,

@@ -201,11 +201,9 @@ pub fn finish_scroll(
     app: AppHandle,
     window: WebviewWindow,
     session: String,
-    window_id: u32,
-    x: f64,
-    y: f64,
+    rect: Option<Rect>,
 ) -> Result<(), String> {
-    capture::finish_scroll(&app, window.label(), &session, window_id, x, y)
+    capture::finish_scroll(&app, window.label(), &session, rect)
 }
 
 /// The Stop button on the Scrolling Capture notice.

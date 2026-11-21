@@ -341,7 +341,7 @@ const EDITOR_KEYS = [
             <div class="row-label">
               Direction
               <small>
-                Lockshot scrolls the window you click and saves a page at a time to a new folder in the folder for
+                Lockshot scrolls the area you select and saves a page at a time to a new folder in the folder for
                 saves without editing. Chat apps keep older messages above, so scroll up to save a thread's history.
               </small>
             </div>

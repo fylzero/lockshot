@@ -1,11 +1,11 @@
-//! Scrolling Capture: pick a window, and Lockshot scrolls it a page at a time,
-//! saving a screenshot of the window after each scroll, until the content
-//! stops moving. Meant for long chat threads (Slack, Discord, Teams) and
+//! Scrolling Capture: select part of the screen, and Lockshot scrolls it a
+//! page at a time, saving a screenshot of that area after each scroll, until
+//! the content stops moving. Meant for long chat threads (Slack, Discord, Teams) and
 //! other pages whose lists are virtualized, so the full history is never in
 //! the page source at once.
 //!
-//! The scroll is a real scroll-wheel event sent with the pointer over the
-//! spot the user clicked, so it reaches the pane under it whether or not the
+//! The scroll is a real scroll-wheel event sent with the pointer in the
+//! middle of the area, so it reaches the pane under it whether or not the
 //! window has keyboard focus. Every run goes to its own folder of numbered
 //! files, and the pages are joined into one long image as they come in (see
 //! stitch.rs); on macOS the text can be read off them too (see ocr.rs).
@@ -25,7 +25,7 @@ use tauri::{AppHandle, Manager};
 use crate::commands::AppState;
 use crate::settings::{self, Settings};
 use crate::stitch::{Pane, Stitcher};
-use crate::{export, hotkeys, ocr, platform, quick_save};
+use crate::{export, frame, hotkeys, ocr, platform, quick_save};
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -49,16 +49,32 @@ pub fn is_running() -> bool {
 
 /// Esc, the Stop button, or a second press of the hotkey.
 pub fn stop() {
+    debug_log("stop requested");
     STOP.store(true, Ordering::SeqCst);
+    /* Give the mouse back at once, not after the files are written. */
+    platform::unlock_pointer();
 }
 
-/// Where to scroll and what to capture, in the units xcap reports windows in
+/// The area to scroll and capture, in the units xcap reports displays in
 /// (points on macOS, physical pixels elsewhere).
 pub struct Target {
-    pub window_id: u32,
-    pub point: (i32, i32),
-    /// For sizing the first scroll step.
-    pub window_height: f64,
+    /// The display's top-left corner on the desktop, to find it again.
+    pub display: (i32, i32),
+    /// The area, relative to the display.
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Target {
+    /// The middle of the area on the desktop, where the scroll goes.
+    fn point(&self) -> (i32, i32) {
+        (
+            self.display.0 + (self.x + self.width / 2) as i32,
+            self.display.1 + (self.y + self.height / 2) as i32,
+        )
+    }
 }
 
 /// Start the run on its own thread. Returns at once.
@@ -69,13 +85,30 @@ pub fn start(app: &AppHandle, target: Target) -> Result<(), String> {
     STOP.store(false, Ordering::SeqCst);
     let app = app.clone();
     std::thread::spawn(move || {
+        /* Give the mouse back however the run ends, even on a panic. */
+        let _unlock = UnlockOnDrop;
         let esc = hotkeys::register_extra(&app, STOP_ACTION, STOP_KEY)
-            .inspect_err(|err| eprintln!("{err}"))
+            .inspect_err(|err| debug_log(&format!("Esc hotkey not registered: {err}")))
             .is_ok();
+        /*
+         * The Esc hotkey does not always get through (it did not on macOS
+         * with the pointer locked), so also watch the key itself.
+         */
+        std::thread::spawn(|| {
+            while RUNNING.load(Ordering::SeqCst) {
+                if platform::escape_down() {
+                    debug_log("Esc is down: stopping");
+                    stop();
+                }
+                std::thread::sleep(Duration::from_millis(15));
+            }
+        });
         let outcome = run(&app, &target);
         if esc {
             hotkeys::unregister_extra(&app, STOP_KEY);
         }
+        frame::hide(&app);
+        quick_save::set_avoid(&app, None);
         RUNNING.store(false, Ordering::SeqCst);
         match outcome {
             Ok(done) => quick_save::show_scroll_done(
@@ -90,6 +123,14 @@ pub fn start(app: &AppHandle, target: Target) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+struct UnlockOnDrop;
+
+impl Drop for UnlockOnDrop {
+    fn drop(&mut self) {
+        platform::unlock_pointer();
+    }
 }
 
 struct Done {
@@ -112,9 +153,8 @@ impl Pointer {
             open_prompt_to_get_permissions: false,
             ..Default::default()
         };
-        let enigo = Enigo::new(&settings).map_err(|err| {
-            format!("Lockshot could not control the mouse to scroll the window: {err}")
-        })?;
+        let enigo = Enigo::new(&settings)
+            .map_err(|err| format!("Lockshot could not control the mouse to scroll: {err}"))?;
         Ok(Self { enigo })
     }
 
@@ -132,7 +172,7 @@ impl Pointer {
         let result = self.enigo.smooth_scroll(amount, Axis::Vertical);
         #[cfg(not(target_os = "macos"))]
         let result = self.enigo.scroll(amount, Axis::Vertical);
-        result.map_err(|err| format!("Could not scroll the window: {err}"))
+        result.map_err(|err| format!("Could not scroll: {err}"))
     }
 }
 
@@ -147,13 +187,13 @@ struct Step {
 }
 
 impl Step {
-    /// `scale`: image pixels per point of the window (2 on Retina).
-    fn new(window_height: f64, scale: f64) -> Self {
+    /// `scale`: image pixels per point of the area (2 on Retina).
+    fn new(area_height: f64, scale: f64) -> Self {
         if cfg!(target_os = "macos") {
-            /* Pixel scrolling: start at a third of the window, safely under
+            /* Pixel scrolling: start at a third of the area, safely under
             a page. A point of scroll is usually a point of content. */
             Step {
-                amount: (window_height * 0.3).max(40.0),
+                amount: (area_height * 0.3).max(40.0),
                 min: 20.0,
                 max: 8000.0,
                 px_per_unit: Some(scale),
@@ -201,16 +241,37 @@ impl Step {
 
 fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let settings = app.state::<AppState>().settings.lock().unwrap().clone();
-    let window = find_window(target.window_id)?;
+    let monitor = find_display(target.display)?;
+    let point = target.point();
+    frame::show(
+        app,
+        frame::Area {
+            x: target.display.0 + target.x as i32,
+            y: target.display.1 + target.y as i32,
+            width: target.width as i32,
+            height: target.height as i32,
+        },
+        frame::Area {
+            x: target.display.0,
+            y: target.display.1,
+            width: monitor.width().map_err(|err| err.to_string())? as i32,
+            height: monitor.height().map_err(|err| err.to_string())? as i32,
+        },
+    );
     let mut pointer = Pointer::new()?;
     let up = settings.scroll_direction == "up";
     let direction = if up { -1 } else { 1 };
     let delay = Duration::from_millis(settings.scroll_delay_ms as u64);
     let max_pages = settings.scroll_max_pages.max(1);
 
-    /* X11 reads window pixels off the screen, so let the overlay go first. */
-    std::thread::sleep(Duration::from_millis(150));
-    let first = capture(&window)?;
+    /* Hold the pointer in the middle of the area, where the scrolls go,
+    until the run ends; on Linux moving the mouse stops the run instead. */
+    pointer.move_to(point);
+    let locked = platform::lock_pointer(point.0, point.1);
+
+    /* The area is read off the screen, so let the overlay go first. */
+    std::thread::sleep(Duration::from_millis(250));
+    let first = capture(app, &monitor, target)?;
 
     let dir = output_dir(app, &settings)?;
     let keep_pages = settings.scroll_output != "image";
@@ -230,15 +291,11 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let mut thumb_first = Some(first.clone());
     let mut last_frame = Frame::new(&first);
     writer.save(&first)?;
-    quick_save::show_scroll_progress(app, writer.pages, &first);
+    quick_save::show_scroll_progress(app, writer.pages, &first, locked);
     let mut last = first;
 
-    let scale = if target.window_height > 0.0 {
-        last.height() as f64 / target.window_height
-    } else {
-        1.0
-    };
-    let mut step = Step::new(target.window_height, scale);
+    let scale = last.height() as f64 / target.height.max(1) as f64;
+    let mut step = Step::new(target.height as f64, scale);
     let mut stalls = 0;
     let mut placed = false;
     let note;
@@ -254,14 +311,18 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
         /* The user took the mouse back: treat it as Stop. */
         if placed {
             if let Some((x, y)) = platform::cursor_point(app) {
-                let (px, py) = target.point;
+                let (px, py) = point;
                 if (x - px).abs() > POINTER_SLACK || (y - py).abs() > POINTER_SLACK {
                     note = "Stopped".to_string();
                     break;
                 }
             }
         }
-        pointer.move_to(target.point);
+        pointer.move_to(point);
+        if locked && !STOP.load(Ordering::SeqCst) {
+            /* Windows lets go of the pointer by itself now and then. */
+            platform::lock_pointer(point.0, point.1);
+        }
         placed = true;
         pointer.scroll(step.units() * direction)?;
         let started = Instant::now();
@@ -276,9 +337,9 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             break;
         }
 
-        let next = capture(&window)?;
+        let next = capture(app, &monitor, target)?;
         if next.dimensions() != last.dimensions() {
-            note = "Stopped because the window changed size".to_string();
+            note = "Stopped because the display changed".to_string();
             break;
         }
         let frame = Frame::new(&next);
@@ -331,10 +392,19 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             step.units()
         ));
         writer.save(&next)?;
-        quick_save::show_scroll_progress(app, writer.pages, &next);
+        quick_save::show_scroll_progress(app, writer.pages, &next, locked);
         last_frame = frame;
         last = next;
     }
+
+    /*
+     * Joining the long image and reading the text can take a while: say it
+     * stopped, and give back the mouse and the screen, straight away.
+     */
+    platform::unlock_pointer();
+    frame::hide(app);
+    quick_save::set_avoid(app, None);
+    quick_save::show_scroll_saving(app, writer.pages, &last, &note);
 
     let mut saved = Vec::new();
     if keep_pages {
@@ -405,20 +475,24 @@ fn sleep_unless_stopped(total: Duration) {
     }
 }
 
-fn find_window(id: u32) -> Result<xcap::Window, String> {
-    xcap::Window::all()
+fn find_display((x, y): (i32, i32)) -> Result<xcap::Monitor, String> {
+    xcap::Monitor::all()
         .map_err(|err| err.to_string())?
         .into_iter()
-        .find(|w| w.id().ok() == Some(id))
-        .ok_or_else(|| "That window has closed.".to_string())
+        .find(|m| m.x().ok() == Some(x) && m.y().ok() == Some(y))
+        .ok_or_else(|| "That display is no longer available.".to_string())
 }
 
-fn capture(window: &xcap::Window) -> Result<RgbaImage, String> {
-    let image = window
-        .capture_image()
-        .map_err(|err| format!("Could not capture the window: {err}"))?;
+/// The selected area as it is on screen now, with the toast out of the way.
+fn capture(app: &AppHandle, monitor: &xcap::Monitor, target: &Target) -> Result<RgbaImage, String> {
+    if quick_save::park_if_covering(app) {
+        std::thread::sleep(Duration::from_millis(120));
+    }
+    let image = monitor
+        .capture_region(target.x, target.y, target.width, target.height)
+        .map_err(|err| format!("Could not capture the screen: {err}"))?;
     if image.width() < 2 || image.height() < 2 {
-        return Err("The window could not be captured. Is it minimized?".into());
+        return Err("The selected area could not be captured.".into());
     }
     Ok(image)
 }
@@ -503,7 +577,7 @@ impl Writer {
     }
 }
 
-/// The window is compared in this many vertical strips.
+/// The area is compared in this many vertical strips.
 const STRIPS: u32 = 8;
 
 /**
@@ -554,7 +628,7 @@ fn row(image: &RgbaImage, y: u32, x0: u32, x1: u32) -> Row {
     Row { hash, flat }
 }
 
-/// What a scroll did to the window.
+/// What a scroll did to the area.
 enum Change {
     /// The content moved by a measurable amount.
     Moved(Shift),

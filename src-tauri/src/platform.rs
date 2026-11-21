@@ -68,6 +68,9 @@ mod mac {
     extern "C" {
         pub fn CGEventCreate(source: *const c_void) -> *mut c_void;
         pub fn CGEventGetLocation(event: *mut c_void) -> CGPoint;
+        pub fn CGWarpMouseCursorPosition(point: CGPoint) -> i32;
+        pub fn CGAssociateMouseAndMouseCursorPosition(connected: u32) -> i32;
+        pub fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -135,6 +138,82 @@ pub fn set_cursor(x: i32, y: i32) {
         let _ = windows::Win32::UI::WindowsAndMessaging::SetCursorPos(x, y);
     }
 }
+
+/**
+ * Scrolling Capture: hold the pointer at `(x, y)` so moving the mouse does
+ * nothing until unlock_pointer. Lockshot's own scroll events still go
+ * through. macOS unhooks the pointer from the mouse, and hooks it back up
+ * if Lockshot quits. Windows pins it to that spot, but lets go by itself on
+ * Ctrl+Alt+Del or an app switch, so call this again before every scroll.
+ * Returns whether the pointer is locked; Linux does not lock it.
+ */
+#[cfg(target_os = "macos")]
+pub fn lock_pointer(x: i32, y: i32) -> bool {
+    unsafe {
+        mac::CGWarpMouseCursorPosition(mac::CGPoint {
+            x: x as f64,
+            y: y as f64,
+        });
+        mac::CGAssociateMouseAndMouseCursorPosition(0) == 0
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn lock_pointer(x: i32, y: i32) -> bool {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::ClipCursor;
+    let rect = RECT {
+        left: x,
+        top: y,
+        right: x + 1,
+        bottom: y + 1,
+    };
+    unsafe { ClipCursor(Some(&rect as *const RECT)).is_ok() }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn lock_pointer(_x: i32, _y: i32) -> bool {
+    false
+}
+
+/// Whether Esc is held down right now, whichever app has the keyboard.
+#[cfg(target_os = "macos")]
+pub fn escape_down() -> bool {
+    /// kCGEventSourceStateHIDSystemState, and the Esc key code.
+    const HID_SYSTEM_STATE: i32 = 1;
+    const ESCAPE: u16 = 0x35;
+    unsafe { mac::CGEventSourceKeyState(HID_SYSTEM_STATE, ESCAPE) }
+}
+
+#[cfg(target_os = "windows")]
+pub fn escape_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE};
+    unsafe { GetAsyncKeyState(VK_ESCAPE.0 as i32) as u16 & 0x8000 != 0 }
+}
+
+/// Linux relies on the Esc hotkey alone.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn escape_down() -> bool {
+    false
+}
+
+/// Give the mouse back after lock_pointer. Safe to call when not locked.
+#[cfg(target_os = "macos")]
+pub fn unlock_pointer() {
+    unsafe {
+        mac::CGAssociateMouseAndMouseCursorPosition(1);
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn unlock_pointer() {
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::ClipCursor(None);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn unlock_pointer() {}
 
 /// Whether a capture would see other apps' windows rather than just the
 /// wallpaper, which is what macOS hands back without the permission.

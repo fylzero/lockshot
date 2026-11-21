@@ -13,8 +13,8 @@ import type { OverlayStart, WindowTarget } from "./types";
  * with an "overlay-start" event, so it can appear without loading a page
  * first. In window mode it highlights the window under the pointer instead
  * of drawing a selection, and a click captures that window. Scroll mode
- * (Scrolling Capture) picks a window the same way, and the spot clicked is
- * where Lockshot scrolls, so it reaches the right pane.
+ * (Scrolling Capture) draws a selection like area mode: Lockshot scrolls
+ * the middle of it and captures just that part of the screen page by page.
  */
 
 const win = getCurrentWindow();
@@ -28,7 +28,7 @@ const finishing = ref(false);
 const mode = ref<OverlayStart["mode"]>("area");
 const windows = ref<WindowTarget[]>([]);
 
-const picksWindow = computed(() => mode.value === "window" || mode.value === "scroll");
+const picksWindow = computed(() => mode.value === "window");
 
 /** Capture Window: the frontmost window under the pointer, in CSS pixels. */
 const hovered = computed(() => {
@@ -171,8 +171,12 @@ async function onPointerUp() {
   /* A click without a drag takes the whole screen. */
   const rect = s && s.w >= 4 && s.h >= 4 ? { x: s.x / W, y: s.y / H, width: s.w / W, height: s.h / H } : null;
   try {
-    await api.finishArea(session.value, rect);
-  } catch {
+    if (mode.value === "scroll") await api.finishScroll(session.value, rect);
+    else await api.finishArea(session.value, rect);
+  } catch (err) {
+    if (mode.value === "scroll") {
+      void emitTo("main", "capture-error", typeof err === "string" ? err : "Lockshot couldn't start the scrolling capture.");
+    }
     await api.cancelArea();
   }
 }
@@ -181,13 +185,8 @@ async function pickWindow() {
   const target = hovered.value?.target;
   if (!target || finishing.value) return;
   finishing.value = true;
-  const p = pointer.value!;
   try {
-    if (mode.value === "scroll") {
-      await api.finishScroll(session.value, target.id, p.x / window.innerWidth, p.y / window.innerHeight);
-    } else {
-      await api.finishWindow(session.value, target.id);
-    }
+    await api.finishWindow(session.value, target.id);
   } catch (err) {
     void emitTo("main", "capture-error", typeof err === "string" ? err : "Lockshot couldn't capture that window.");
     await api.cancelArea();
@@ -235,8 +234,7 @@ onBeforeUnmount(() => {
         </div>
       </template>
       <div class="overlay-hint">
-        <span v-if="windows.length && mode === 'scroll'">Click inside the part of a window to scroll</span>
-        <span v-else-if="windows.length">Click a window to capture it</span>
+        <span v-if="windows.length">Click a window to capture it</span>
         <span v-else>No windows to capture on this display</span>
         <span><kbd>Esc</kbd> to cancel</span>
       </div>
@@ -249,7 +247,7 @@ onBeforeUnmount(() => {
       />
       <div v-if="selection && sizeLabel" class="overlay-size" :style="labelStyle">{{ sizeLabel }}</div>
       <div v-if="!start" class="overlay-hint">
-        <span>Drag to capture</span>
+        <span>{{ mode === "scroll" ? "Drag over the part to scroll" : "Drag to capture" }}</span>
         <span>Click for full screen</span>
         <span><kbd>Esc</kbd> to cancel</span>
       </div>

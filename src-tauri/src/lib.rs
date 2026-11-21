@@ -2,6 +2,7 @@ mod autostart;
 mod capture;
 mod commands;
 mod export;
+mod frame;
 mod hotkeys;
 #[cfg(target_os = "macos")]
 mod menu;

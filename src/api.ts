@@ -25,8 +25,8 @@ export const api = {
   finishArea: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
     invoke<void>("finish_area", { session, rect }),
   finishWindow: (session: string, windowId: number) => invoke<void>("finish_window", { session, windowId }),
-  finishScroll: (session: string, windowId: number, x: number, y: number) =>
-    invoke<void>("finish_scroll", { session, windowId, x, y }),
+  finishScroll: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
+    invoke<void>("finish_scroll", { session, rect }),
   scrollStop: () => invoke<void>("scroll_stop"),
   overlayPending: () => invoke<OverlayStart | null>("overlay_pending"),
   cancelArea: () => invoke<void>("cancel_area"),

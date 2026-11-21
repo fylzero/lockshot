@@ -4,6 +4,7 @@
 //! capture in the editor after all, for the shots that need markup.
 
 use std::io::Cursor;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use chrono::{DateTime, Datelike, Local, Timelike};
@@ -53,6 +54,10 @@ pub struct Toast {
     pages: Option<u32>,
     /// Scrolling Capture is still going; the toast offers Stop.
     running: bool,
+    /// The pointer is held still while it runs, so only Esc stops it.
+    pointer_locked: bool,
+    /// Scrolling Capture has stopped and is writing the long image and text.
+    saving: bool,
     /// Why a Scrolling Capture ended, such as "Reached the end".
     note: Option<String>,
     /// What a finished Scrolling Capture saved, such as "Saved 12 pages
@@ -63,6 +68,40 @@ pub struct Toast {
 #[derive(Default)]
 pub struct ToastState {
     current: Mutex<Option<Toast>>,
+    /// The part of the screen a Scrolling Capture is capturing, as x, y,
+    /// width and height in fractions of the display. The toast keeps out of
+    /// it so it never ends up in the pages.
+    avoid: Mutex<Option<(f64, f64, f64, f64)>>,
+    /// No corner was clear of that part, so the toast sits on top of it.
+    covering: AtomicBool,
+}
+
+/// Scrolling Capture: keep the toast out of this part of the display, or
+/// stop avoiding anything with None.
+pub fn set_avoid(app: &AppHandle, rect: Option<(f64, f64, f64, f64)>) {
+    let state = app.state::<ToastState>();
+    *state.avoid.lock().unwrap() = rect;
+    if rect.is_none() {
+        state.covering.store(false, Ordering::SeqCst);
+    }
+}
+
+/**
+ * Scrolling Capture is about to capture its area: if the toast is on top of
+ * it, move it off the screen until the next update puts it back. Moved, not
+ * hidden: hiding and showing it again on macOS can leave the finished
+ * notice hidden. Returns whether it moved it.
+ */
+pub fn park_if_covering(app: &AppHandle) -> bool {
+    if !app.state::<ToastState>().covering.load(Ordering::SeqCst) {
+        return false;
+    }
+    let Some(window) = app.get_webview_window(TOAST_LABEL) else {
+        return false;
+    };
+    window
+        .set_position(tauri::PhysicalPosition::new(-32_000, -32_000))
+        .is_ok()
 }
 
 /// The settings to save with, when Save Without Editing is on.
@@ -251,7 +290,13 @@ pub fn prewarm(app: &AppHandle) {
     let _ = toast_window(app);
 }
 
-/// Bottom-right of the display under the pointer, clear of the Dock or taskbar.
+/**
+ * Bottom-right of the display under the pointer, clear of the Dock or
+ * taskbar. Never under the pointer: Scrolling Capture scrolls whatever is
+ * there, and the toast would catch the scroll. While a Scrolling Capture
+ * runs it also keeps out of the area being captured, trying the other
+ * corners in turn.
+ */
 fn place(app: &AppHandle, window: &WebviewWindow) {
     let monitor = app
         .cursor_position()
@@ -264,19 +309,40 @@ fn place(app: &AppHandle, window: &WebviewWindow) {
     };
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
-    let x = area.position.x as f64 + area.size.width as f64 - (TOAST_WIDTH + TOAST_MARGIN) * scale;
-    let mut y =
-        area.position.y as f64 + area.size.height as f64 - (TOAST_HEIGHT + TOAST_MARGIN) * scale;
-    /*
-     * Never under the pointer: Scrolling Capture scrolls whatever is there,
-     * and the toast would catch the scroll. Go to the top corner instead.
-     */
-    if let Ok(p) = app.cursor_position() {
-        let (w, h) = (TOAST_WIDTH * scale, TOAST_HEIGHT * scale);
-        if p.x >= x && p.x < x + w && p.y >= y && p.y < y + h {
-            y = area.position.y as f64 + TOAST_MARGIN * scale;
-        }
-    }
+    let (w, h) = (TOAST_WIDTH * scale, TOAST_HEIGHT * scale);
+    let margin = TOAST_MARGIN * scale;
+    let (left, top) = (
+        area.position.x as f64 + margin,
+        area.position.y as f64 + margin,
+    );
+    let right = area.position.x as f64 + area.size.width as f64 - w - margin;
+    let bottom = area.position.y as f64 + area.size.height as f64 - h - margin;
+    let corners = [(right, bottom), (right, top), (left, bottom), (left, top)];
+
+    let state = app.state::<ToastState>();
+    let avoid = state.avoid.lock().unwrap().map(|(fx, fy, fw, fh)| {
+        let (mx, my) = (monitor.position().x as f64, monitor.position().y as f64);
+        let (mw, mh) = (monitor.size().width as f64, monitor.size().height as f64);
+        (mx + fx * mw, my + fy * mh, fw * mw, fh * mh)
+    });
+    let pointer = app.cursor_position().ok().map(|p| (p.x, p.y));
+    let free_of_pointer = |&(x, y): &(f64, f64)| {
+        !pointer.is_some_and(|(px, py)| px >= x && px < x + w && py >= y && py < y + h)
+    };
+    let free_of_area = |&(x, y): &(f64, f64)| {
+        !avoid
+            .is_some_and(|(ax, ay, aw, ah)| x < ax + aw && ax < x + w && y < ay + ah && ay < y + h)
+    };
+    let spot = corners
+        .into_iter()
+        .find(|c| free_of_pointer(c) && free_of_area(c));
+    state
+        .covering
+        .store(spot.is_none() && avoid.is_some(), Ordering::SeqCst);
+    /* Nowhere clear: stay away from the pointer at least. */
+    let (x, y) = spot
+        .or_else(|| corners.into_iter().find(free_of_pointer))
+        .unwrap_or(corners[0]);
     let _ = window.set_position(tauri::PhysicalPosition::new(
         x.round() as i32,
         y.round() as i32,
@@ -307,7 +373,7 @@ fn show(app: &AppHandle, toast: Toast) {
 }
 
 /// Scrolling Capture: how many pages are saved so far, with the latest.
-pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage) {
+pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage, pointer_locked: bool) {
     show(
         app,
         Toast {
@@ -315,6 +381,23 @@ pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage) {
             thumbnail: Some(thumbnail(latest)),
             pages: Some(pages),
             running: true,
+            pointer_locked,
+            ..Default::default()
+        },
+    );
+}
+
+/// Scrolling Capture stopped and is writing the long image and text.
+pub fn show_scroll_saving(app: &AppHandle, pages: u32, latest: &RgbaImage, note: &str) {
+    show(
+        app,
+        Toast {
+            id: uuid::Uuid::new_v4().to_string(),
+            thumbnail: Some(thumbnail(latest)),
+            pages: Some(pages),
+            running: true,
+            saving: true,
+            note: Some(note.to_string()),
             ..Default::default()
         },
     );

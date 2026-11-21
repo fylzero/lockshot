@@ -88,9 +88,9 @@ export interface OverlayStart {
   index: number;
   width: number;
   height: number;
-  /** "scroll" picks a window like "window", and the click sets where it scrolls. */
+  /** "scroll" selects an area like "area", and Lockshot scrolls and captures it. */
   mode: "area" | "window" | "scroll";
-  /** Front to back; empty for an area capture. */
+  /** Front to back; empty unless picking a window. */
   windows: WindowTarget[];
 }
 
@@ -107,6 +107,10 @@ export interface SaveToast {
   pages: number | null;
   /** Scrolling Capture is still going. */
   running: boolean;
+  /** The pointer is held still while Scrolling Capture runs, so only Esc stops it. */
+  pointerLocked: boolean;
+  /** Scrolling Capture has stopped and is writing the long image and text. */
+  saving: boolean;
   /** Why a Scrolling Capture ended. */
   note: string | null;
   /** What a finished Scrolling Capture saved, such as "Saved 12 pages and a long image". */

@@ -4,7 +4,7 @@ import type { HotkeyAction, Hotkeys, OsName, SystemShortcut } from "./types";
 export const HOTKEY_ACTIONS: { id: HotkeyAction; label: string; hint: string }[] = [
   { id: "area", label: "Capture area", hint: "Drag to select part of a screen. Click without dragging for the whole screen." },
   { id: "window", label: "Capture window", hint: "Click a window to capture just that window, even if others overlap it." },
-  { id: "scroll", label: "Scrolling capture", hint: "Click inside a window: Lockshot scrolls it and saves a page at a time into a new folder. Press again or Esc to stop." },
+  { id: "scroll", label: "Scrolling capture", hint: "Select an area: Lockshot scrolls it and saves a page at a time into a new folder. Press again or Esc to stop; the mouse is locked while it runs on macOS and Windows." },
   { id: "screen", label: "Capture screen", hint: "The whole screen under the pointer, straight to the editor." },
   { id: "editor", label: "Open Lockshot", hint: "Bring the editor back, with your last capture." },
 ];

@@ -96,13 +96,22 @@ onBeforeUnmount(() => {
         <span class="detail">{{ toast.error }}</span>
       </div>
     </template>
+    <template v-else-if="toast.saving">
+      <div class="thumb"><canvas ref="thumb" /></div>
+      <div class="body">
+        <strong>{{ toast.note ?? "Stopped" }} · {{ pageCount(toast.pages) }}</strong>
+        <span class="detail"><span class="saving-dot" />Saving…</span>
+      </div>
+    </template>
     <template v-else-if="toast.running">
       <div class="thumb"><canvas ref="thumb" /></div>
       <div class="body">
         <strong>Scrolling capture · {{ pageCount(toast.pages) }}</strong>
-        <span class="detail">Press <kbd>Esc</kbd> or move the mouse to stop.</span>
+        <span v-if="toast.pointerLocked" class="detail running-detail">The mouse is locked while Lockshot scrolls. Press <kbd>Esc</kbd> to stop.</span>
+        <span v-else class="detail running-detail">Auto-scrolls with mouse events, so moving the mouse stops it. <kbd>Esc</kbd> stops it too.</span>
       </div>
-      <div class="actions">
+      <!-- The pointer can't reach a button while it is locked. -->
+      <div v-if="!toast.pointerLocked" class="actions">
         <button class="primary" type="button" @click="stop">Stop</button>
       </div>
     </template>
@@ -192,6 +201,27 @@ onBeforeUnmount(() => {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.saving-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: saving-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes saving-pulse {
+  from {
+    opacity: 0.25;
+  }
+}
+
+/* Room for why moving the mouse stops it. */
+.running-detail {
+  -webkit-line-clamp: 3;
 }
 
 .actions {
