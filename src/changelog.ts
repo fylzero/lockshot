@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 21, 2026",
     notes: [
       "Selected text in a text box keeps its color while you edit it, with a light highlight behind it, instead of turning white and blending into a white outline.",
+      "Selected text now shows a resize dot on its lower-right corner, so you can make it bigger or smaller without opening it for editing first.",
     ],
   },
   {

@@ -430,10 +430,14 @@ function isSegment(shape: ResizableShape) {
 }
 
 /**
- * Where the resize dot sits: the bottom-right corner of a box, ellipse or
- * redact area, or the lower-right end of a line or arrow.
+ * Where the resize dot sits: the bottom-right corner of a box, ellipse,
+ * redact area or text, or the lower-right end of a line or arrow.
  */
 function resizeCorner(shape: Shape | null) {
+  if (shape?.kind === "text") {
+    const b = bounds(shape);
+    return { x: b.x + b.w, y: b.y + b.h };
+  }
   if (!isResizable(shape)) return null;
   if (isSegment(shape)) {
     return shape.x2 + shape.y2 >= shape.x1 + shape.y1 ? { x: shape.x2, y: shape.y2 } : { x: shape.x1, y: shape.y1 };
@@ -463,6 +467,8 @@ let drag: {
   /** Set while the resize dot is dragged: the point that stays put (a box's
       top-left corner or a line's other end), and for a line which end moves. */
   corner?: { x: number; y: number; end?: "start" | "end" };
+  /** Set while the resize dot scales a text: its height when the drag began. */
+  textHeight?: number;
   /** The highlighter's freehand path, kept while Shift straightens the stroke. */
   path?: number[];
 } | null = null;
@@ -493,6 +499,10 @@ function onPointerDown(event: PointerEvent) {
   }
 
   const selected = selectedShape.value;
+  if (selected?.kind === "text" && onResizeCorner(p)) {
+    drag = { start: p, moved: false, original: selected, corner: { x: selected.x, y: selected.y }, textHeight: bounds(selected).h };
+    return;
+  }
   if (isResizable(selected) && onResizeCorner(p)) {
     let corner: NonNullable<NonNullable<typeof drag>["corner"]>;
     if (isSegment(selected)) {
@@ -577,6 +587,18 @@ function onPointerMove(event: PointerEvent) {
       const s = clampToImage(drag.start);
       pendingCrop.value = normalize(s.x, s.y, c.x, c.y);
     }
+    return;
+  }
+  if (drag.corner && drag.textHeight && drag.original?.kind === "text") {
+    /* Scale the text like the dot on the text box does: dragging down makes
+       it bigger, with the top-left corner staying put. */
+    if (!drag.moved) return;
+    const original = drag.original;
+    const h = Math.max(4 / cssScale.value, drag.textHeight + p.y - drag.start.y);
+    const size = Math.max(6, Math.min(2000, Math.round((original.size * h) / drag.textHeight)));
+    if (size === (shapes.value.find((s) => s.id === original.id) as TextShape | undefined)?.size) return;
+    const resized = { ...original, size };
+    shapes.value = shapes.value.map((s) => (s.id === resized.id ? resized : s));
     return;
   }
   if (drag.corner && isResizable(drag.original ?? null)) {
