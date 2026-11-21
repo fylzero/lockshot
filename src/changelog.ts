@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     notes: [
       "Hold Shift with the Highlighter to draw a straight horizontal highlight.",
       "Hold Shift with the Pen to draw a straight line, horizontal or vertical depending on which way you drag. Let go of Shift mid-stroke to go back to freehand.",
+      "Select a rectangle, ellipse, line or arrow to get a resize dot, like the one on Redact boxes. Drag the dot on a rectangle or ellipse's lower-right corner to change its size, or the dot on a line or arrow's lower-right end to make it longer or shorter. The stroke stays the same thickness. Hold Shift to keep a rectangle or ellipse square, or a line at 45° steps.",
     ],
   },
   {

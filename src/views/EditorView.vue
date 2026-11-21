@@ -413,19 +413,36 @@ function insideRect(r: Rect | null, p: { x: number; y: number }) {
   return !!r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 }
 
-/* ---- Redact resize ---- */
+/* ---- Resize dot ---- */
 
 /** Radius of the corner dot, in CSS pixels. */
 const HANDLE_RADIUS = 6;
 
-/** The bottom-right corner of a redact box, where its resize dot sits. */
+type ResizableShape = Extract<Shape, { x1: number }>;
+
+function isResizable(shape: Shape | null): shape is ResizableShape {
+  return !!shape && (["arrow", "line", "rect", "ellipse", "blur"] as string[]).includes(shape.kind);
+}
+
+/** Lines and arrows resize by an end; boxes and ellipses by a corner. */
+function isSegment(shape: ResizableShape) {
+  return shape.kind === "line" || shape.kind === "arrow";
+}
+
+/**
+ * Where the resize dot sits: the bottom-right corner of a box, ellipse or
+ * redact area, or the lower-right end of a line or arrow.
+ */
 function resizeCorner(shape: Shape | null) {
-  if (shape?.kind !== "blur") return null;
+  if (!isResizable(shape)) return null;
+  if (isSegment(shape)) {
+    return shape.x2 + shape.y2 >= shape.x1 + shape.y1 ? { x: shape.x2, y: shape.y2 } : { x: shape.x1, y: shape.y1 };
+  }
   const r = normalize(shape.x1, shape.y1, shape.x2, shape.y2);
   return { x: r.x + r.w, y: r.y + r.h };
 }
 
-/** Whether `p` is on the selected redact box's resize dot. */
+/** Whether `p` is on the selected shape's resize dot. */
 function onResizeCorner(p: { x: number; y: number }) {
   if (editing.value || tool.value === "crop") return false;
   const c = resizeCorner(selectedShape.value);
@@ -443,8 +460,9 @@ let drag: {
   original?: Shape;
   /** Set while the Crop tool is drawing or moving the pending crop. */
   crop?: { mode: "draw" | "move"; before: Rect | null };
-  /** Set while the corner dot resizes a redact box; the top-left corner stays put. */
-  corner?: { x: number; y: number };
+  /** Set while the resize dot is dragged: the point that stays put (a box's
+      top-left corner or a line's other end), and for a line which end moves. */
+  corner?: { x: number; y: number; end?: "start" | "end" };
   /** The highlighter's freehand path, kept while Shift straightens the stroke. */
   path?: number[];
 } | null = null;
@@ -475,9 +493,19 @@ function onPointerDown(event: PointerEvent) {
   }
 
   const selected = selectedShape.value;
-  if (selected?.kind === "blur" && onResizeCorner(p)) {
-    const r = normalize(selected.x1, selected.y1, selected.x2, selected.y2);
-    drag = { start: p, moved: false, original: selected, corner: { x: r.x, y: r.y } };
+  if (isResizable(selected) && onResizeCorner(p)) {
+    let corner: NonNullable<NonNullable<typeof drag>["corner"]>;
+    if (isSegment(selected)) {
+      const c = resizeCorner(selected)!;
+      const movesEnd = c.x === selected.x2 && c.y === selected.y2;
+      corner = movesEnd
+        ? { x: selected.x1, y: selected.y1, end: "end" }
+        : { x: selected.x2, y: selected.y2, end: "start" };
+    } else {
+      const r = normalize(selected.x1, selected.y1, selected.x2, selected.y2);
+      corner = { x: r.x, y: r.y };
+    }
+    drag = { start: p, moved: false, original: selected, corner };
     return;
   }
 
@@ -551,11 +579,26 @@ function onPointerMove(event: PointerEvent) {
     }
     return;
   }
-  if (drag.corner && drag.original?.kind === "blur") {
+  if (drag.corner && isResizable(drag.original ?? null)) {
     if (!drag.moved) return;
+    const original = drag.original as ResizableShape;
     const a = drag.corner;
     let dx = p.x - a.x;
     let dy = p.y - a.y;
+    /* Resizing only moves the geometry: the stroke width stays the same. */
+    if (a.end) {
+      /* A line or arrow: the dragged end follows the pointer, the other
+         stays put. Shift keeps it at 45° steps, as when drawing it. */
+      let len = Math.hypot(dx, dy);
+      let angle = Math.atan2(dy, dx);
+      if (event.shiftKey) angle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+      len = Math.max(len, 4 / cssScale.value);
+      const q = { x: a.x + Math.cos(angle) * len, y: a.y + Math.sin(angle) * len };
+      const resized =
+        a.end === "end" ? { ...original, x2: q.x, y2: q.y } : { ...original, x1: q.x, y1: q.y };
+      shapes.value = shapes.value.map((s) => (s.id === resized.id ? resized : s));
+      return;
+    }
     /* Shift keeps the box square, as when drawing it. */
     if (event.shiftKey) {
       const side = Math.max(Math.abs(dx), Math.abs(dy));
@@ -566,7 +609,7 @@ function onPointerMove(event: PointerEvent) {
     const min = 4 / cssScale.value;
     if (Math.abs(dx) < min) dx = Math.sign(dx || 1) * min;
     if (Math.abs(dy) < min) dy = Math.sign(dy || 1) * min;
-    const resized = { ...drag.original, x1: a.x, y1: a.y, x2: a.x + dx, y2: a.y + dy };
+    const resized = { ...original, x1: a.x, y1: a.y, x2: a.x + dx, y2: a.y + dy };
     shapes.value = shapes.value.map((s) => (s.id === resized.id ? resized : s));
     return;
   }
