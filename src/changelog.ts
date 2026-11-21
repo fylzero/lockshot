@@ -7,19 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
-    version: "1.3.3",
-    date: "November 21, 2026",
-    notes: [
-      "When Scrolling Capture finishes, the Saving and Saved notices stay where the progress notice was, instead of jumping to another corner of the screen.",
-      "The Saving notice says what Scrolling Capture is doing: stitching the long image, then reading the text (OCR), with how many parts are read so far on a long capture.",
-    ],
-  },
-  {
     version: "1.3.2",
     date: "November 21, 2026",
     notes: [
       "Scrolling Capture no longer stops after one page when the middle of the selected area is over something that does not scroll, like a still window or a header. Lockshot now tries other spots in the area until one scrolls, and keeps scrolling there. If nothing in the area scrolls, it says so.",
       "Saving text from the first Scrolling Capture after installing or updating is quicker. macOS loads its text-reading models the first time a new version reads text, which could take a while, so Lockshot now does that in the background when it starts.",
+      "When Scrolling Capture finishes, the Saving and Saved notices stay where the progress notice was, instead of jumping to another corner of the screen.",
+      "The Saving notice says what Scrolling Capture is doing: stitching the long image, then reading the text (OCR), with how many parts are read so far on a long capture.",
     ],
   },
   {
