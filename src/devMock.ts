@@ -41,6 +41,34 @@ function sampleImage() {
   return URL.createObjectURL(new Blob([raw]));
 }
 
+function sampleToast(error: boolean) {
+  if (error) {
+    return { id: "t1", capture: null, path: null, fileName: null, thumbnail: null, copied: false,
+      error: "Could not write the image: Permission denied (os error 13)" };
+  }
+  const width = 160, height = 100;
+  const c = document.createElement("canvas");
+  c.width = width;
+  c.height = height;
+  const g = c.getContext("2d")!;
+  const grad = g.createLinearGradient(0, 0, width, height);
+  grad.addColorStop(0, "#3a4229");
+  grad.addColorStop(1, "#1b2a3a");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, width, height);
+  g.fillStyle = "#f5f6f8";
+  g.fillRect(20, 14, 120, 72);
+  return {
+    id: "t1",
+    capture: { id: "sample", width: 1600, height: 1000, name: "Screenshot-2026-11-20-18.04.29" },
+    path: "/Users/demo/Pictures/Screenshot-2026-11-20-18.04.29.png",
+    fileName: "Screenshot-2026-11-20-18.04.29.png",
+    thumbnail: { width, height, data: Array.from(g.getImageData(0, 0, width, height).data) },
+    copied: true,
+    error: null,
+  };
+}
+
 export function installMock() {
   /* macOS's screenshot shortcuts; add #sysfree to the URL to start with them off. */
   const on = !location.hash.includes("sysfree");
@@ -59,13 +87,17 @@ export function installMock() {
     filenameTemplate: "Screenshot-{date}-{time}",
     jpegQuality: 90,
     copyOnCapture: false,
+    quickSave: false,
+    quickSaveDir: "",
     launchAtLogin: true,
     keepRunningInBackground: true,
     theme: "system",
     onboarded: !location.hash.includes("setup"),
     setupStep: "",
   };
-  mockWindows("main");
+  /* #toast shows the save notice window; #toast-error its failure state. */
+  const toastWindow = location.hash.includes("toast");
+  mockWindows(toastWindow ? "toast" : "main");
   let opened = 0;
   mockIPC((cmd, args) => {
     const a = args as Record<string, any>;
@@ -120,6 +152,8 @@ export function installMock() {
         return null;
       case "take_pending_route":
         return null;
+      case "toast_pending":
+        return toastWindow ? sampleToast(location.hash.includes("error")) : null;
       case "plugin:app|version":
         return "0.1.0";
       default:

@@ -174,6 +174,16 @@ async function usePreset(which = preset.value) {
 
         <SystemShortcutNotice />
 
+        <div v-if="settings.quickSave" class="quick-save-note">
+          <Icon name="info" />
+          <span>
+            Save without editing is on: captures go straight to
+            <code>{{ settings.quickSaveDir || settings.saveDir || env.defaultSaveDir }}</code>
+            as {{ settings.format.toUpperCase() }}.
+          </span>
+          <button class="ghost" @click="settings.quickSave = false; saveSettingsSoon()">Turn off</button>
+        </div>
+
         <div class="capture-cards">
           <button class="capture-card" @click="capture('area')">
             <Icon name="area" />

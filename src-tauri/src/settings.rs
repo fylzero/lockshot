@@ -75,6 +75,10 @@ pub struct Settings {
     pub jpeg_quality: u8,
     /// Put every capture on the clipboard as soon as it is taken.
     pub copy_on_capture: bool,
+    /// Save each capture straight to a file instead of opening the editor.
+    pub quick_save: bool,
+    /// Where those files go. Empty means the save folder.
+    pub quick_save_dir: String,
     /// Start Lockshot in the tray when the user logs in.
     pub launch_at_login: bool,
     /// macOS: Cmd+Q closes the window and leaves Lockshot in the menu bar,
@@ -97,6 +101,8 @@ impl Default for Settings {
             filename_template: "Screenshot-{date}-{time}".into(),
             jpeg_quality: 90,
             copy_on_capture: false,
+            quick_save: false,
+            quick_save_dir: String::new(),
             launch_at_login: true,
             keep_running_in_background: true,
             theme: "system".into(),
@@ -247,6 +253,15 @@ pub fn resolved_save_dir(app: &AppHandle, settings: &Settings) -> PathBuf {
     }
 }
 
+/// The folder Save Without Editing writes to.
+pub fn resolved_quick_save_dir(app: &AppHandle, settings: &Settings) -> PathBuf {
+    if settings.quick_save_dir.trim().is_empty() {
+        resolved_save_dir(app, settings)
+    } else {
+        PathBuf::from(settings.quick_save_dir.trim())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +314,7 @@ mod tests {
         assert!(from_json(r#"{ "copyOnCapture": "yes" }"#).is_err());
         assert!(from_json(r#"{ "launchAtLogin": 1 }"#).is_err());
         assert!(from_json(r#"{ "keepRunningInBackground": "no" }"#).is_err());
+        assert!(from_json(r#"{ "quickSave": "on" }"#).is_err());
         assert!(from_json("[]").is_err());
     }
 }

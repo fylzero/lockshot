@@ -19,6 +19,10 @@ export interface Settings {
   filenameTemplate: string;
   jpegQuality: number;
   copyOnCapture: boolean;
+  /** Save each capture straight to a file instead of opening the editor. */
+  quickSave: boolean;
+  /** Where those files go; empty means the save folder. */
+  quickSaveDir: string;
   launchAtLogin: boolean;
   /** macOS: Cmd+Q hides the window and leaves Lockshot in the menu bar. */
   keepRunningInBackground: boolean;
@@ -74,6 +78,17 @@ export interface OverlayStart {
   mode: "area" | "window";
   /** Front to back; empty for an area capture. */
   windows: WindowTarget[];
+}
+
+/** The save notice shown after a capture with Save Without Editing on. */
+export interface SaveToast {
+  id: string;
+  capture: CaptureReady | null;
+  path: string | null;
+  fileName: string | null;
+  thumbnail: { width: number; height: number; data: number[] } | null;
+  copied: boolean;
+  error: string | null;
 }
 
 export interface PermissionStatus {

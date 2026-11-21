@@ -6,6 +6,7 @@ mod hotkeys;
 #[cfg(target_os = "macos")]
 mod menu;
 mod platform;
+mod quick_save;
 mod settings;
 mod system_shortcuts;
 mod tray;
@@ -140,13 +141,15 @@ pub fn run() {
             }
             app.manage(capture::CaptureState::default());
             app.manage(hotkeys::HotkeyState::default());
+            app.manage(quick_save::ToastState::default());
             let errors = hotkeys::register_all(&handle, &settings.hotkeys);
-            tray::build(&handle, &settings.hotkeys)?;
+            tray::build(&handle, &settings)?;
             /* Build the capture overlays ahead of time so area capture opens instantly. */
             let warm = handle.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(800));
                 capture::prewarm(&warm);
+                quick_save::prewarm(&warm);
             });
 
             let first_run = !settings.onboarded;
@@ -203,6 +206,9 @@ pub fn run() {
             commands::reregister_hotkeys,
             commands::set_system_screenshot_shortcuts,
             commands::hide_main,
+            commands::toast_pending,
+            commands::toast_dismiss,
+            commands::toast_edit,
             take_pending_route,
         ])
         .build(tauri::generate_context!())

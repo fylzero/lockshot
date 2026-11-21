@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the editor window and capture overlays",
+  "description": "Capability for the editor window, capture overlays and the save notice",
   "windows": [
     "main",
-    "overlay-*"
+    "overlay-*",
+    "toast"
   ],
   "permissions": [
     "core:default",

@@ -8,6 +8,7 @@ import type {
   OverlayStart,
   PermissionStatus,
   Settings,
+  SaveToast,
   SystemShortcut,
 } from "./types";
 
@@ -44,6 +45,9 @@ export const api = {
     invoke<SystemShortcut[]>("set_system_screenshot_shortcuts", { ids, enabled }),
   takePendingRoute: () => invoke<string | null>("take_pending_route"),
   hideMain: () => invoke<void>("hide_main"),
+  toastPending: () => invoke<SaveToast | null>("toast_pending"),
+  toastDismiss: (id: string) => invoke<void>("toast_dismiss", { id }),
+  toastEdit: (id: string) => invoke<void>("toast_edit", { id }),
 
   /** Write the final image to disk; resolves to the path written. */
   saveImage(png: Uint8Array, options: SaveOptions) {

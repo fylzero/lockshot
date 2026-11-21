@@ -46,6 +46,17 @@ async function chooseFolder() {
   }
 }
 
+async function chooseQuickSaveFolder() {
+  const picked = await open({
+    directory: true,
+    defaultPath: settings.value?.quickSaveDir || settings.value?.saveDir || env.defaultSaveDir,
+  });
+  if (typeof picked === "string" && settings.value) {
+    settings.value.quickSaveDir = picked;
+    saveSettingsSoon();
+  }
+}
+
 function insertToken(token: string) {
   if (!settings.value) return;
   settings.value.filenameTemplate += token;
@@ -285,6 +296,34 @@ const EDITOR_KEYS = [
         <div class="card">
           <div class="row">
             <div class="row-label">
+              Save without editing
+              <small>
+                Captures go straight to a file in the default format instead of opening the editor. A notice shows
+                each one, with Edit for the ones that need markup. Also in the {{ env.os === 'macos' ? 'menu bar' : 'tray' }} menu.
+              </small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.quickSave" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Folder for saves without editing
+              <small>{{ settings.quickSaveDir || "Same as the save folder" }}</small>
+            </div>
+            <div class="row-control">
+              <button v-if="settings.quickSaveDir" class="ghost" @click="settings.quickSaveDir = ''; saveSettingsSoon()">
+                Use save folder
+              </button>
+              <button @click="chooseQuickSaveFolder"><Icon name="folder" /> Choose…</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <div class="row-label">
               Launch at login
               <small>Start Lockshot in the {{ env.os === 'macos' ? 'menu bar' : 'tray' }} so the hotkeys work right away.</small>
             </div>
@@ -306,7 +345,7 @@ const EDITOR_KEYS = [
           <div class="row">
             <div class="row-label">
               Copy every capture to the clipboard
-              <small>Paste straight into chat or docs without saving.</small>
+              <small>Paste straight into chat or docs without saving. Also applies to saves without editing.</small>
             </div>
             <label class="switch">
               <input v-model="settings.copyOnCapture" type="checkbox" @change="saveSettingsSoon" />

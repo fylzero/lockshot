@@ -354,6 +354,30 @@ a {
   color: var(--text-faint);
 }
 
+.quick-save-note {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+  padding: 0.55rem 0.6rem 0.55rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-raised));
+  font-size: 0.9rem;
+}
+
+.quick-save-note > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.quick-save-note > .icon,
+.quick-save-note > svg {
+  flex: none;
+  color: var(--accent-text);
+}
+
 .capture-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));

@@ -144,7 +144,14 @@ fn ensure_permission(app: &AppHandle) -> Result<(), String> {
     Err("Lockshot needs Screen Recording permission before it can capture.".into())
 }
 
-fn store(app: &AppHandle, image: RgbaImage, name: Option<String>) -> CaptureReady {
+/// Keep a capture for the editor to load. `latest` marks it as the one a
+/// page that is still loading should open.
+pub fn store(
+    app: &AppHandle,
+    image: RgbaImage,
+    name: Option<String>,
+    latest: bool,
+) -> CaptureReady {
     let state = app.state::<CaptureState>();
     let id = uuid::Uuid::new_v4().to_string();
     let ready = CaptureReady {
@@ -166,13 +173,31 @@ fn store(app: &AppHandle, image: RgbaImage, name: Option<String>) -> CaptureRead
         images.retain(|key, _| Some(key) == latest.as_ref());
     }
     images.insert(id.clone(), Arc::new(image));
-    *state.latest.lock().unwrap() = Some(id);
+    if latest {
+        *state.latest.lock().unwrap() = Some(id);
+    }
     ready
 }
 
-/// Hand a finished capture to the editor window and bring it forward.
+/**
+ * Hand a finished capture to the editor window and bring it forward, or,
+ * with Save Without Editing on, write it straight to a file. Opened files
+ * (which come with a name) always go to the editor.
+ */
 fn deliver(app: &AppHandle, image: RgbaImage, name: Option<String>) {
-    let ready = store(app, image, name);
+    if name.is_none() {
+        if let Some(settings) = crate::quick_save::enabled(app) {
+            crate::quick_save::save(app, image, settings);
+            return;
+        }
+    }
+    let ready = store(app, image, name, true);
+    open_stored(app, ready);
+}
+
+/// Open a stored capture in a new editor tab.
+pub fn open_stored(app: &AppHandle, ready: CaptureReady) {
+    *app.state::<CaptureState>().latest.lock().unwrap() = Some(ready.id.clone());
     /* The page opens a new editor tab for it when the event arrives. */
     crate::show_main(app, None);
     let _ = app.emit_to("main", "capture-ready", ready);

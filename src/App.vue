@@ -21,7 +21,7 @@ import {
   showToast,
   toast,
 } from "./store";
-import type { CaptureReady } from "./types";
+import type { CaptureReady, Settings } from "./types";
 
 const router = useRouter();
 const route = useRoute();
@@ -112,6 +112,10 @@ onMounted(async () => {
       const file = event.payload.paths.find((p) => OPENABLE.test(p));
       if (file) void api.openImage(file).catch((err) => showToast(errorMessage(err), "error"));
       else if (event.payload.paths.length) showToast("Lockshot opens PNG, JPG, GIF, BMP, TIFF and HEIC images.", "error");
+    }),
+    /* Save Without Editing toggled from the tray menu. */
+    await listen<Settings>("settings-changed", (event) => {
+      if (settings.value) settings.value = { ...event.payload, hotkeys: settings.value.hotkeys };
     }),
     await listen("check-for-updates", () => void checkForUpdatesNow()),
     await listen("close-tab-or-window", () => closeActiveTabOrWindow()),

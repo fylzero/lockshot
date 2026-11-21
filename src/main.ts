@@ -8,10 +8,15 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
 }
 const { getCurrentWindow } = await import("@tauri-apps/api/window");
 
-/* Capture overlays share the bundle but mount a page of their own. */
-if (getCurrentWindow().label.startsWith("overlay-")) {
+/* Capture overlays and the save notice share the bundle but mount pages of their own. */
+const label = getCurrentWindow().label;
+if (label.startsWith("overlay-")) {
   const { default: Overlay } = await import("./Overlay.vue");
   createApp(Overlay).mount("#app");
+} else if (label === "toast") {
+  await import("./theme");
+  const { default: SaveToast } = await import("./SaveToast.vue");
+  createApp(SaveToast).mount("#app");
 } else {
   await import("./theme");
   const [{ default: App }, { router }] = await Promise.all([import("./App.vue"), import("./router")]);

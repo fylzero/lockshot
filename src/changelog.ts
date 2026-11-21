@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 20, 2026",
     notes: [
       "Capture Window (⌥⇧5): click a window to capture just that window.",
+      "Save Without Editing: turn it on from the menu bar icon or Settings and every capture is saved straight to a file in your default format, without opening the editor. A small notice in the corner shows each one, with Edit to open it for markup. Pick a separate folder for these in Settings › General.",
       "Annotations are the same size on every screenshot. A size looks the same at 1:1 zoom whether the capture is a small area or a full Retina screen, instead of growing with the image.",
       "The back end of an arrow is rounded, like the Line tool.",
       "The editor remembers your tool, shape, color, size and Redact style after you quit and reopen Lockshot.",

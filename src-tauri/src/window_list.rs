@@ -49,7 +49,10 @@ pub fn all() -> Vec<AppWindow> {
         let ptr = value(dict, key) as *const CFNumber;
         let mut out = 0f64;
         (!ptr.is_null()
-            && (*ptr).value(CFNumberType::DoubleType, &mut out as *mut f64 as *mut c_void))
+            && (*ptr).value(
+                CFNumberType::DoubleType,
+                &mut out as *mut f64 as *mut c_void,
+            ))
         .then_some(out)
     }
     unsafe fn string(dict: &CFDictionary, key: &str) -> String {
@@ -90,7 +93,8 @@ pub fn all() -> Vec<AppWindow> {
             };
             let bounds = value(dict, "kCGWindowBounds") as *const CFDictionary;
             let mut rect = CGRect::default();
-            if bounds.is_null() || !CGRectMakeWithDictionaryRepresentation(Some(&*bounds), &mut rect)
+            if bounds.is_null()
+                || !CGRectMakeWithDictionaryRepresentation(Some(&*bounds), &mut rect)
             {
                 continue;
             }
@@ -149,7 +153,7 @@ pub fn all() -> Vec<AppWindow> {
         })
         .collect();
     /* Higher z is nearer the front. */
-    windows.sort_by(|a, b| b.0.cmp(&a.0));
+    windows.sort_by_key(|a| std::cmp::Reverse(a.0));
     windows.into_iter().map(|(_, w)| w).collect()
 }
 

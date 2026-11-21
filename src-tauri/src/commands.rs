@@ -65,7 +65,11 @@ pub fn update_settings(
         autostart::apply(&app, next.launch_at_login)?;
     }
     settings::save(&app, &next)?;
+    let quick_save_changed = next.quick_save != current.quick_save;
     *current = next.clone();
+    if quick_save_changed {
+        tray::refresh(&app, &next);
+    }
     Ok(next)
 }
 
@@ -73,7 +77,7 @@ fn store_hotkeys(app: &AppHandle, state: &AppState, hotkeys: Hotkeys) -> Result<
     let mut current = state.settings.lock().unwrap();
     current.hotkeys = hotkeys;
     settings::save(app, &current)?;
-    tray::refresh(app, &current.hotkeys);
+    tray::refresh(app, &current);
     state.hotkey_errors.lock().unwrap().clear();
     Ok(current.clone())
 }
@@ -346,6 +350,7 @@ pub fn apply_settings_json(
     let hotkeys_changed = ACTIONS
         .iter()
         .any(|a| current.hotkeys.get(a) != next.hotkeys.get(a));
+    let quick_save_changed = current.quick_save != next.quick_save;
     hotkeys::replace_all(&app, &current.hotkeys, &next.hotkeys)?;
     if let Err(err) = settings::save(&app, &next) {
         let _ = hotkeys::replace_all(&app, &next.hotkeys, &current.hotkeys);
@@ -359,8 +364,10 @@ pub fn apply_settings_json(
         }
     }
     *current = next.clone();
+    if hotkeys_changed || quick_save_changed {
+        tray::refresh(&app, &next);
+    }
     if hotkeys_changed {
-        tray::refresh(&app, &next.hotkeys);
         state.hotkey_errors.lock().unwrap().clear();
     }
     Ok(next)
@@ -432,4 +439,20 @@ pub fn set_system_screenshot_shortcuts(
 #[tauri::command]
 pub fn hide_main(app: AppHandle) {
     crate::hide_main(&app);
+}
+
+/// The save notice to show, for a toast window that just loaded.
+#[tauri::command]
+pub fn toast_pending(app: AppHandle) -> Option<crate::quick_save::Toast> {
+    crate::quick_save::pending(&app)
+}
+
+#[tauri::command]
+pub fn toast_dismiss(app: AppHandle, id: String) {
+    crate::quick_save::dismiss(&app, &id);
+}
+
+#[tauri::command]
+pub fn toast_edit(app: AppHandle, id: String) {
+    crate::quick_save::edit(&app, &id);
 }
