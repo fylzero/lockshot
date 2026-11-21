@@ -9,8 +9,9 @@
 //! middle, so a line on a chunk boundary is read whole, once.
 
 use std::ops::Range;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -22,9 +23,11 @@ const CHUNK: u32 = 1200;
 /// Rows read above and below what a chunk owns, so lines on a boundary are
 /// read whole. Taller than any line of chat text, even on Retina.
 const MARGIN: u32 = 80;
-/// Chunks that may wait for the reader before the run slows down to let it
-/// catch up.
-const QUEUE: usize = 4;
+/// Chunks kept in memory while they wait for the reader. Past that they
+/// wait in a temp file instead: the run never waits for the reader, which
+/// can fall far behind while macOS loads its text models the first time a
+/// new build reads text (30 seconds and more in testing).
+const IN_MEMORY: usize = 4;
 
 pub fn available() -> bool {
     imp::available()
@@ -62,8 +65,37 @@ pub struct Found {
     pub height: f64,
 }
 
+/// A chunk waiting to be read.
+enum Chunk {
+    Memory(RgbaImage),
+    /// Raw RGBA in a temp file, deleted once read.
+    Disk {
+        path: PathBuf,
+        width: u32,
+        height: u32,
+    },
+}
+
+impl Chunk {
+    fn load(self) -> Result<RgbaImage, String> {
+        match self {
+            Chunk::Memory(image) => Ok(image),
+            Chunk::Disk {
+                path,
+                width,
+                height,
+            } => {
+                let raw = std::fs::read(&path).map_err(|err| err.to_string());
+                let _ = std::fs::remove_file(&path);
+                RgbaImage::from_raw(width, height, raw?)
+                    .ok_or_else(|| "A waiting chunk of the page was cut short.".to_string())
+            }
+        }
+    }
+}
+
 struct Job {
-    image: RgbaImage,
+    image: Chunk,
     /// Keep text whose middle falls in these rows of `image`.
     keep: Range<u32>,
 }
@@ -79,8 +111,10 @@ pub struct Reader {
     started: bool,
     /// The columns to read: the scrolling pane, leaving out sidebars.
     columns: Option<Range<u32>>,
-    jobs: Option<SyncSender<Job>>,
+    jobs: Option<Sender<Job>>,
     worker: Option<JoinHandle<Vec<Vec<String>>>>,
+    /// Where chunks wait when too many are in memory; removed at the end.
+    spill: PathBuf,
     /// Chunks sent to the worker, and chunks it has read, to show progress.
     sent: AtomicUsize,
     read: Arc<AtomicUsize>,
@@ -88,13 +122,16 @@ pub struct Reader {
 
 impl Reader {
     pub fn start(up: bool) -> Self {
-        let (tx, rx) = sync_channel::<Job>(QUEUE);
+        let (tx, rx) = channel::<Job>();
         let read = Arc::new(AtomicUsize::new(0));
         let counter = read.clone();
+        let spill = std::env::temp_dir().join(format!("lockshot-text-{}", uuid::Uuid::new_v4()));
+        let spill_dir = spill.clone();
         let worker = std::thread::spawn(move || {
-            rx.into_iter()
+            let blocks = rx
+                .into_iter()
                 .map(|job| {
-                    let block = match imp::recognize(&job.image) {
+                    let block = match job.image.load().and_then(|image| imp::recognize(&image)) {
                         Ok(found) => lines(found, &job.keep),
                         Err(err) => {
                             eprintln!("Could not read text: {err}");
@@ -104,7 +141,9 @@ impl Reader {
                     counter.fetch_add(1, Ordering::SeqCst);
                     block
                 })
-                .collect()
+                .collect();
+            let _ = std::fs::remove_dir_all(&spill_dir);
+            blocks
         });
         Self {
             up,
@@ -113,6 +152,7 @@ impl Reader {
             columns: None,
             jobs: Some(tx),
             worker: Some(worker),
+            spill,
             sent: AtomicUsize::new(0),
             read,
         }
@@ -217,8 +257,33 @@ impl Reader {
             let height = image.height();
             keep = (height - keep.end)..(height - keep.start);
         }
+        let sent = self.sent.load(Ordering::SeqCst);
+        let waiting = sent.saturating_sub(self.read.load(Ordering::SeqCst));
+        let image = if waiting < IN_MEMORY {
+            Chunk::Memory(image)
+        } else {
+            self.spill_to_disk(image, sent)
+        };
         if jobs.send(Job { image, keep }).is_ok() {
             self.sent.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// Put a chunk in a temp file to wait, or keep it in memory if that fails.
+    fn spill_to_disk(&self, image: RgbaImage, n: usize) -> Chunk {
+        let path = self.spill.join(format!("{n}.rgba"));
+        let written = std::fs::create_dir_all(&self.spill)
+            .and_then(|_| std::fs::write(&path, image.as_raw()));
+        match written {
+            Ok(()) => Chunk::Disk {
+                path,
+                width: image.width(),
+                height: image.height(),
+            },
+            Err(err) => {
+                eprintln!("Could not set aside text to read: {err}");
+                Chunk::Memory(image)
+            }
         }
     }
 }

@@ -7,6 +7,14 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.3",
+    date: "November 21, 2026",
+    notes: [
+      "Scrolling Capture no longer repeats the bottom of the page in the long image. When a page reached its end on a list of look-alike rows, like a GitHub or email list, a last scroll that moved nothing could be taken for a small one and part of the page was stitched on again.",
+      "Scrolling Capture no longer pauses on a page while the text is read. The first capture after installing or updating could sit on one page for 15 seconds or more while macOS loaded its text-reading models; now scrolling carries on and the text catches up while it saves.",
+    ],
+  },
+  {
     version: "1.3.2",
     date: "November 21, 2026",
     notes: [

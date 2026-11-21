@@ -635,6 +635,11 @@ const STRIPS: u32 = 8;
  */
 struct Frame {
     strips: Vec<Vec<Row>>,
+    /// The page in grey, to check a measured move against the pixels
+    /// themselves: exact row hashes can be thrown by faint noise.
+    grey: Vec<u8>,
+    width: usize,
+    height: usize,
 }
 
 impl Frame {
@@ -647,9 +652,52 @@ impl Frame {
                 (0..image.height()).map(|y| row(image, y, x0, x1)).collect()
             })
             .collect();
-        Frame { strips }
+        let grey = image
+            .pixels()
+            .map(|p| ((p[0] as u32 * 77 + p[1] as u32 * 150 + p[2] as u32 * 29) >> 8) as u8)
+            .collect();
+        Frame {
+            strips,
+            grey,
+            width: width as usize,
+            height: image.height() as usize,
+        }
     }
 }
+
+/// How badly `after` matches `before` with the content moved up `moved`
+/// rows: the mean grey difference between `after[y]` and `before[y +
+/// moved]` over `rows` and `columns` of `after`. 0 is a perfect match.
+fn misfit(
+    before: &Frame,
+    after: &Frame,
+    moved: usize,
+    rows: Range<usize>,
+    columns: Range<usize>,
+) -> f64 {
+    let height = before.height.min(after.height);
+    let rows = rows.start..rows.end.min(height.saturating_sub(moved));
+    let columns = columns.start..columns.end.min(before.width).min(after.width);
+    if rows.is_empty() || columns.is_empty() {
+        return f64::MAX;
+    }
+    let mut total = 0u64;
+    for y in rows.clone() {
+        let a = &after.grey[y * after.width..][columns.clone()];
+        let b = &before.grey[(y + moved) * before.width..][columns.clone()];
+        total += a
+            .iter()
+            .zip(b)
+            .map(|(p, q)| p.abs_diff(*q) as u64)
+            .sum::<u64>();
+    }
+    total as f64 / (rows.len() * columns.len()) as f64
+}
+
+/// Below this mean grey difference two pages count as the same picture.
+/// Identical captures can still differ faintly (smoothing, a fading
+/// scroll bar), which is enough to throw the exact row hashes.
+const STILL_NOISE: f64 = 1.0;
 
 /// A row of a strip: its hash, and whether it is one flat colour (blank
 /// rows match anywhere, so they are no use for finding the scroll).
@@ -689,13 +737,30 @@ enum Change {
 /// Compare two pages. `up`: the scroll was towards the top, so the
 /// content moved down the window.
 fn compare(before: &Frame, after: &Frame, up: bool, expected: Option<usize>) -> Change {
-    let shift = if up {
-        find_shift(&after.strips, &before.strips, expected)
-    } else {
-        find_shift(&before.strips, &after.strips, expected)
-    };
-    if let Some(shift) = shift {
-        return Change::Moved(shift);
+    /* Measured as content moving up from `older` to `newer`. */
+    let (older, newer) = if up { (after, before) } else { (before, after) };
+    if let Some(shift) = find_shift(&older.strips, &newer.strips, expected) {
+        /*
+         * On a list of look-alike rows a page that did not move at all can
+         * still line up at some offset. Keep the move only if the pixels
+         * fit better moved than left where they were.
+         */
+        let strips = STRIPS as usize;
+        let columns =
+            newer.width * shift.strips.start / strips..newer.width * shift.strips.end / strips;
+        let rows = shift.top..shift.top + shift.pane - shift.moved;
+        let moved = misfit(older, newer, shift.moved, rows.clone(), columns.clone());
+        let still = misfit(older, newer, 0, rows, columns);
+        if moved < still {
+            return Change::Moved(shift);
+        }
+        debug_log(&format!(
+            "  shift {} px rejected: fits {moved:.2} moved, {still:.2} in place",
+            shift.moved
+        ));
+    }
+    if misfit(before, after, 0, 0..after.height, 0..after.width) < STILL_NOISE {
+        return Change::Same;
     }
     let (mut compared, mut differing) = (0usize, 0usize);
     for (b, a) in before.strips.iter().zip(&after.strips) {
@@ -921,6 +986,29 @@ mod tests {
         }
     }
 
+    /// The end of a list of look-alike rows (a GitHub runs page): the last
+    /// scroll moved nothing, but faint noise made every row hash differ,
+    /// and the rows lined up at a false offset that was stitched on again.
+    #[test]
+    fn faint_noise_on_a_page_that_did_not_move_is_not_a_scroll() {
+        let page = repeating_page(400, 0);
+        let mut noisy = page.clone();
+        for (x, y, p) in noisy.enumerate_pixels_mut() {
+            if (x + y) % 3 == 0 {
+                p[2] ^= 1;
+            }
+        }
+        let (a, b) = (Frame::new(&page), Frame::new(&noisy));
+        assert!(matches!(compare(&a, &b, false, Some(84)), Change::Same));
+        assert!(matches!(compare(&a, &b, true, Some(84)), Change::Same));
+        /* The pixel check still keeps a real move on look-alike rows. */
+        let moved = Frame::new(&repeating_page(400, 90));
+        match compare(&a, &moved, false, Some(84)) {
+            Change::Moved(shift) => assert_eq!(shift.moved, 90),
+            _ => panic!("expected a move"),
+        }
+    }
+
     #[test]
     fn same_pages_are_unchanged() {
         let a = Frame::new(&page(300, 0));
@@ -953,18 +1041,37 @@ mod tests {
         assert_eq!(step.units(), 420);
     }
 
-    /// Run with --ignored against two captures of a real window, saved by
-    /// examples/scrolltest.rs, to check the comparison on real pixels.
+    /// Run with --ignored, and LOCKSHOT_PAGE_A and LOCKSHOT_PAGE_B set to two
+    /// pages of a real run, to check the comparison on real pixels.
     #[test]
     #[ignore]
     fn compare_saved_captures() {
-        let a = image::open("/tmp/claude-501/scroll-a.png")
-            .unwrap()
-            .to_rgba8();
-        let b = image::open("/tmp/claude-501/scroll-b.png")
-            .unwrap()
-            .to_rgba8();
-        let result = match compare(&Frame::new(&a), &Frame::new(&b), false, Some(600)) {
+        let open = |var: &str| {
+            image::open(std::env::var(var).expect(var))
+                .unwrap()
+                .to_rgba8()
+        };
+        let (a, b) = (open("LOCKSHOT_PAGE_A"), open("LOCKSHOT_PAGE_B"));
+        let differing: Vec<u32> = (0..a.height())
+            .filter(|&y| {
+                (0..a.width()).any(|x| {
+                    let (p, q) = (a.get_pixel(x, y).0, b.get_pixel(x, y).0);
+                    (0..3).any(|c| p[c].abs_diff(q[c]) > 40)
+                })
+            })
+            .collect();
+        eprintln!(
+            "{} rows differ clearly, first {:?}, last {:?}",
+            differing.len(),
+            differing.first(),
+            differing.last()
+        );
+        let (fa, fb) = (Frame::new(&a), Frame::new(&b));
+        eprintln!(
+            "misfit in place {:.3}",
+            misfit(&fa, &fb, 0, 0..fa.height, 0..fa.width)
+        );
+        let result = match compare(&fa, &fb, false, Some(600)) {
             Change::Moved(s) => format!("moved {} px, pane {} px", s.moved, s.pane),
             Change::Changed => "changed".into(),
             Change::Same => "same".into(),
