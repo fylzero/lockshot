@@ -60,6 +60,46 @@ It's a sibling of [Shipyard](https://github.com/fylzero/shipyard) and [Recon](ht
 
 These use the same digits as the macOS screenshot keys without fighting the system for them. To use ⌘⇧4 / ⌘⇧3 (macOS) or PrtSc (Windows, Linux) instead, open **Settings › Hotkeys** and follow the instructions there.
 
+## Screenshots
+
+### Home
+
+<p align="center">
+  <img src="docs/screenshots/01-home.png" alt="Home with Capture area, Capture window, Scrolling capture and Capture screen cards and their hotkeys" width="100%">
+</p>
+
+Start any capture with one click, see its hotkey at a glance, or open an image to mark up.
+
+### Annotation Editor
+
+<p align="center">
+  <img src="docs/screenshots/02-editor.png" alt="Editor with a dashboard capture marked up with a box, numbered steps, an arrow, a text label, a highlight and pixelated email addresses" width="100%">
+</p>
+
+Point things out with arrows, boxes, numbered steps, text and the highlighter, and pixelate anything private before you share it.
+
+### Export
+
+<p align="center">
+  <img src="docs/screenshots/03-export.png" alt="Format picker open in the export bar, listing PNG, JPG, HEIC, TIFF, GIF, BMP and PDF" width="100%">
+</p>
+
+Name the file, pick a format, then copy, save, or drag the file icon straight into another app.
+
+### Hotkeys
+
+<p align="center">
+  <img src="docs/screenshots/04-hotkeys.png" alt="Settings showing the Hotkeys page with a shortcut for each capture and instructions for using the system screenshot keys" width="100%">
+</p>
+
+Change any global hotkey, or hand Lockshot the system screenshot keys with step-by-step instructions.
+
+### Demo
+
+<p align="center">
+  <img src="docs/demo.gif" alt="Lockshot demo: marking up a capture with a box, steps, an arrow, a label, a highlight and pixelation, then switching the format to JPG" width="100%">
+</p>
+
 ## Download & Installation
 
 ### macOS (Apple Silicon)
