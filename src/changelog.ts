@@ -7,6 +7,14 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.0",
+    date: "November 20, 2026",
+    notes: [
+      "Hold Shift with the Highlighter to draw a straight horizontal highlight.",
+      "Hold Shift with the Pen to draw a straight line, horizontal or vertical depending on which way you drag. Let go of Shift mid-stroke to go back to freehand.",
+    ],
+  },
+  {
     version: "1.1.0",
     date: "November 20, 2026",
     notes: [

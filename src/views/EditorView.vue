@@ -445,6 +445,8 @@ let drag: {
   crop?: { mode: "draw" | "move"; before: Rect | null };
   /** Set while the corner dot resizes a redact box; the top-left corner stays put. */
   corner?: { x: number; y: number };
+  /** The highlighter's freehand path, kept while Shift straightens the stroke. */
+  path?: number[];
 } | null = null;
 
 function onPointerDown(event: PointerEvent) {
@@ -518,6 +520,7 @@ function onPointerDown(event: PointerEvent) {
       if (tool.value === "blur") draft.redact = redactMode.value;
   }
   drag = { start: p, moved: false };
+  if (draft.kind === "pen" || draft.kind === "highlighter") drag.path = [p.x, p.y];
   draw();
 }
 
@@ -574,8 +577,15 @@ function onPointerMove(event: PointerEvent) {
     return;
   }
   if (!draft) return;
-  if (draft.kind === "pen" || draft.kind === "highlighter") {
-    draft.points.push(p.x, p.y);
+  if ((draft.kind === "pen" || draft.kind === "highlighter") && drag.path) {
+    /* Shift straightens the stroke from where it started: the highlighter
+       always runs horizontally, the pen horizontally or vertically,
+       whichever way the pointer has gone further. Letting go of Shift
+       returns to the freehand path. */
+    drag.path.push(p.x, p.y);
+    const { x, y } = drag.start;
+    const vertical = draft.kind === "pen" && Math.abs(p.y - y) > Math.abs(p.x - x);
+    draft.points = !event.shiftKey ? [...drag.path] : vertical ? [x, y, x, p.y] : [x, y, p.x, y];
   } else if ("x2" in draft) {
     /* Shift keeps lines at 45° steps and boxes square. */
     if (event.shiftKey) {

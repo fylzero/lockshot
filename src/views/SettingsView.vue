@@ -220,7 +220,7 @@ function onJsonKeydown(event: KeyboardEvent) {
 const EDITOR_KEYS = [
   ["V", "Select and move"], ["A", "Arrow"], ["L", "Line"], ["R", "Rectangle"], ["O", "Ellipse"],
   ["P", "Pen"], ["H", "Highlighter"], ["T", "Text"], ["N", "Numbered step"], ["B", "Pixelate"],
-  ["C", "Crop"], ["1–4", "Stroke size"], ["⇧ drag", "Straight lines, squares"],
+  ["C", "Crop"], ["1–4", "Stroke size"], ["⇧ drag", "Straight lines and strokes, squares"],
   [`${modKey}Z`, "Undo"], [`${modKey}⇧Z`, "Redo"], [`${modKey}C`, "Copy image"],
   [`${modKey}S`, "Save"], [`${modKey}⇧S`, "Save As"], [`${modKey}0`, "Zoom to fit"],
 ];
