@@ -92,6 +92,11 @@ pub struct Settings {
     pub scroll_delay_ms: u32,
     /// Stop after this many pages, so an endless feed cannot fill the disk.
     pub scroll_max_pages: u32,
+    /// What a run saves: "both" the pages and one long image of them,
+    /// just the long "image", or just the "pages".
+    pub scroll_output: String,
+    /// Also read the text off the pages into a text file (macOS).
+    pub scroll_text: bool,
     /// Start Lockshot in the tray when the user logs in.
     pub launch_at_login: bool,
     /// macOS: Cmd+Q closes the window and leaves Lockshot in the menu bar,
@@ -119,6 +124,8 @@ impl Default for Settings {
             scroll_direction: "down".into(),
             scroll_delay_ms: 500,
             scroll_max_pages: 200,
+            scroll_output: "both".into(),
+            scroll_text: false,
             launch_at_login: true,
             keep_running_in_background: true,
             theme: "system".into(),
@@ -167,6 +174,7 @@ pub fn to_json(settings: &Settings) -> Result<String, String> {
 
 pub const THEMES: [&str; 3] = ["system", "light", "dark"];
 pub const SCROLL_DIRECTIONS: [&str; 2] = ["down", "up"];
+pub const SCROLL_OUTPUTS: [&str; 3] = ["both", "image", "pages"];
 pub const SCROLL_DELAY_MS: std::ops::RangeInclusive<u32> = 100..=5000;
 pub const SCROLL_MAX_PAGES: std::ops::RangeInclusive<u32> = 2..=1000;
 pub const SETUP_STEPS: [&str; 4] = ["", "permission", "hotkeys", "tray"];
@@ -210,6 +218,9 @@ pub fn from_json(raw: &str) -> Result<Settings, String> {
     }
     if !SCROLL_DIRECTIONS.contains(&settings.scroll_direction.as_str()) {
         return Err("\"scrollDirection\" must be \"down\" or \"up\".".into());
+    }
+    if !SCROLL_OUTPUTS.contains(&settings.scroll_output.as_str()) {
+        return Err("\"scrollOutput\" must be \"both\", \"image\" or \"pages\".".into());
     }
     if !SCROLL_DELAY_MS.contains(&settings.scroll_delay_ms) {
         return Err("\"scrollDelayMs\" must be between 100 and 5000.".into());

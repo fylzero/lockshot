@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
         <canvas ref="thumb" />
       </button>
       <div class="body">
-        <strong>Saved {{ pageCount(toast.pages) }}</strong>
+        <strong>{{ toast.title ?? `Saved ${pageCount(toast.pages)}` }}</strong>
         <span class="detail" :title="toast.path ?? ''">{{ toast.note ? `${toast.note}. ` : "" }}{{ toast.fileName }}</span>
       </div>
       <div class="actions">

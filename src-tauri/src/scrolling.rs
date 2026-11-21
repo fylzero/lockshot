@@ -7,9 +7,12 @@
 //! The scroll is a real scroll-wheel event sent with the pointer over the
 //! spot the user clicked, so it reaches the pane under it whether or not the
 //! window has keyboard focus. Every run goes to its own folder of numbered
-//! files. Esc, the Stop button, or moving the mouse ends it early.
+//! files, and the pages are joined into one long image as they come in (see
+//! stitch.rs); on macOS the text can be read off them too (see ocr.rs).
+//! Esc, the Stop button, or moving the mouse ends it early.
 
 use std::io::Cursor;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -21,7 +24,8 @@ use tauri::{AppHandle, Manager};
 
 use crate::commands::AppState;
 use crate::settings::{self, Settings};
-use crate::{export, hotkeys, platform, quick_save};
+use crate::stitch::{Pane, Stitcher};
+use crate::{export, hotkeys, ocr, platform, quick_save};
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -77,6 +81,7 @@ pub fn start(app: &AppHandle, target: Target) -> Result<(), String> {
             Ok(done) => quick_save::show_scroll_done(
                 &app,
                 done.dir.display().to_string(),
+                done.title,
                 done.pages,
                 done.thumbnail,
                 done.note,
@@ -89,6 +94,8 @@ pub fn start(app: &AppHandle, target: Target) -> Result<(), String> {
 
 struct Done {
     dir: PathBuf,
+    /// What was saved, such as "Saved 12 pages and a long image".
+    title: String,
     pages: u32,
     thumbnail: Option<RgbaImage>,
     note: String,
@@ -206,7 +213,20 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let first = capture(&window)?;
 
     let dir = output_dir(app, &settings)?;
-    let mut writer = Writer::new(dir, &settings, max_pages);
+    let keep_pages = settings.scroll_output != "image";
+    let mut writer = Writer::new(dir.clone(), &settings, max_pages, keep_pages);
+    /* The text is read off the joined rows, so the stitcher runs whenever
+    either is wanted. */
+    let keep_image = settings.scroll_output != "pages";
+    let reader = (settings.scroll_text && ocr::available()).then(|| ocr::Reader::start(up));
+    let mut stitcher = Stitcher::new(
+        dir.clone(),
+        &settings.format,
+        settings.jpeg_quality,
+        up,
+        keep_image,
+        reader,
+    );
     let mut thumb_first = Some(first.clone());
     let mut last_frame = Frame::new(&first);
     writer.save(&first)?;
@@ -285,10 +305,26 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             continue;
         }
         stalls = 0;
-        match change {
-            Change::Moved(shift) => step.adjust(shift.moved, shift.pane),
-            _ => step.shrink(),
-        }
+        let pane = match &change {
+            Change::Moved(shift) => {
+                step.adjust(shift.moved, shift.pane);
+                let width = next.width();
+                stitcher.set_columns(
+                    (width * shift.strips.start as u32 / STRIPS)
+                        ..(width * shift.strips.end as u32 / STRIPS),
+                );
+                Some(Pane {
+                    moved: shift.moved,
+                    top: shift.top,
+                    bottom: shift.top + shift.pane,
+                })
+            }
+            _ => {
+                step.shrink();
+                None
+            }
+        };
+        stitcher.add(&last, &next, pane)?;
         debug_log(&format!(
             "page {} saved, next step {} units",
             writer.pages + 1,
@@ -300,17 +336,50 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
         last = next;
     }
 
+    let mut saved = Vec::new();
+    if keep_pages {
+        saved.push(if writer.pages == 1 {
+            "1 page".to_string()
+        } else {
+            format!("{} pages", writer.pages)
+        });
+    }
+    let (files, text) = stitcher.finish(&last)?;
+    match files.len() {
+        0 => {}
+        1 => saved.push("a long image".to_string()),
+        n => saved.push(format!("a long image in {n} parts")),
+    }
+    if let Some(text) = text {
+        let path = writer.dir.join("Text.txt");
+        std::fs::write(&path, text)
+            .map_err(|err| format!("Could not write {}: {err}", path.display()))?;
+        saved.push("the text".to_string());
+    }
+
     /* Read top to bottom: when scrolling up, the last page is the top. */
     if up {
-        writer.reverse()?;
+        if keep_pages {
+            writer.reverse()?;
+        }
         thumb_first = Some(last);
     }
     Ok(Done {
         dir: writer.dir,
+        title: format!("Saved {}", join_and(&saved)),
         pages: writer.pages,
         thumbnail: thumb_first,
         note,
     })
+}
+
+/// "a", "a and b", "a, b and c".
+fn join_and(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// Each step of a run, in dev builds, for tuning on real apps: printed,
@@ -382,11 +451,14 @@ struct Writer {
     quality: u8,
     digits: usize,
     pages: u32,
+    /// Write the pages, or only count them (just the long image is kept).
+    keep: bool,
 }
 
 impl Writer {
-    fn new(dir: PathBuf, settings: &Settings, max_pages: u32) -> Self {
+    fn new(dir: PathBuf, settings: &Settings, max_pages: u32, keep: bool) -> Self {
         Self {
+            keep,
             dir,
             format: settings.format.clone(),
             quality: settings.jpeg_quality,
@@ -402,6 +474,10 @@ impl Writer {
     }
 
     fn save(&mut self, image: &RgbaImage) -> Result<(), String> {
+        if !self.keep {
+            self.pages += 1;
+            return Ok(());
+        }
         let mut png = Vec::new();
         image
             .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
@@ -522,6 +598,10 @@ fn compare(before: &Frame, after: &Frame, up: bool, expected: Option<usize>) -> 
 struct Shift {
     /// How far the content moved, in image pixels.
     moved: usize,
+    /// Roughly where the moving pane starts, in rows from the top.
+    top: usize,
+    /// The strips that moved: the pane's columns, in eighths of the width.
+    strips: Range<usize>,
     /// Roughly how tall the moving pane is, in image pixels.
     pane: usize,
 }
@@ -632,6 +712,8 @@ fn find_shift(before: &[Vec<Row>], after: &[Vec<Row>], expected: Option<usize>) 
     }
     Some(Shift {
         moved,
+        top,
+        strips: moving[0]..moving[moving.len() - 1] + 1,
         pane: bottom - top + moved,
     })
 }
@@ -750,5 +832,107 @@ mod tests {
             Change::Same => "same".into(),
         };
         eprintln!("{result}");
+    }
+}
+
+/// Run with --ignored and LOCKSHOT_LONG_IMAGE set to a tall render of a
+/// chat page: it is cut into overlapping window captures (a fixed header,
+/// sidebar and message box around a scrolling pane) and run through the
+/// same measuring, stitching and text reading as a real run.
+#[cfg(test)]
+mod pipeline_tests {
+    use super::*;
+    use image::imageops;
+
+    const HEADER: u32 = 60;
+    const PANE: u32 = 600;
+    const FOOTER: u32 = 80;
+    const SIDEBAR: u32 = 160;
+
+    fn window(doc: &RgbaImage, offset: u32) -> RgbaImage {
+        let width = doc.width();
+        let mut out = RgbaImage::from_pixel(
+            width,
+            HEADER + PANE + FOOTER,
+            image::Rgba([240, 240, 245, 255]),
+        );
+        let pane = imageops::crop_imm(doc, 0, offset, width, PANE).to_image();
+        imageops::replace(&mut out, &pane, 0, HEADER as i64);
+        let sidebar = imageops::crop_imm(doc, 0, 0, SIDEBAR, PANE).to_image();
+        imageops::replace(&mut out, &sidebar, 0, HEADER as i64);
+        for x in 300..340 {
+            out.put_pixel(x, HEADER / 2, image::Rgba([0, 0, 0, 255]));
+            out.put_pixel(x, HEADER + PANE + FOOTER / 2, image::Rgba([0, 0, 0, 255]));
+        }
+        out
+    }
+
+    fn run_pages(doc: &RgbaImage, offsets: &[u32], up: bool) -> (RgbaImage, String) {
+        let dir = std::env::temp_dir().join(format!("lockshot-pipeline-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let reader = ocr::available().then(|| ocr::Reader::start(up));
+        let mut stitcher = Stitcher::new(dir.clone(), "png", 90, up, true, reader);
+        let pages: Vec<RgbaImage> = offsets.iter().map(|&o| window(doc, o)).collect();
+        for pair in pages.windows(2) {
+            let (last, next) = (&pair[0], &pair[1]);
+            let Change::Moved(shift) = compare(&Frame::new(last), &Frame::new(next), up, None)
+            else {
+                panic!("expected a move");
+            };
+            let width = next.width();
+            stitcher.set_columns(
+                (width * shift.strips.start as u32 / STRIPS)
+                    ..(width * shift.strips.end as u32 / STRIPS),
+            );
+            let pane = Pane {
+                moved: shift.moved,
+                top: shift.top,
+                bottom: shift.top + shift.pane,
+            };
+            stitcher.add(last, next, Some(pane)).unwrap();
+        }
+        let (files, text) = stitcher.finish(pages.last().unwrap()).unwrap();
+        let image = image::open(&files[0]).unwrap().to_rgba8();
+        std::fs::remove_dir_all(dir).unwrap();
+        (image, text.unwrap_or_default())
+    }
+
+    #[test]
+    #[ignore]
+    fn stitches_and_reads_a_long_page() {
+        let path = std::env::var("LOCKSHOT_LONG_IMAGE").expect("LOCKSHOT_LONG_IMAGE");
+        let doc = image::open(path).unwrap().to_rgba8();
+        let offsets = [0, 420, 853, 1254, 1690, 2111, 2530, 2948, 3380];
+        let last = *offsets.last().unwrap();
+        let expected_height = HEADER + last + PANE + FOOTER;
+        let check = |image: &RgbaImage| {
+            assert_eq!(image.height(), expected_height);
+            /* The message column matches the page row for row. */
+            let content =
+                imageops::crop_imm(image, SIDEBAR, HEADER, doc.width() - SIDEBAR, last + PANE)
+                    .to_image();
+            let original =
+                imageops::crop_imm(&doc, SIDEBAR, 0, doc.width() - SIDEBAR, last + PANE).to_image();
+            assert!(
+                content == original,
+                "stitched content differs from the page"
+            );
+        };
+        let (down, text) = run_pages(&doc, &offsets, false);
+        check(&down);
+        eprintln!("--- down ---\n{text}");
+        let reversed: Vec<u32> = offsets.iter().rev().copied().collect();
+        let (up, text_up) = run_pages(&doc, &reversed, true);
+        check(&up);
+        for (name, text) in [("down", &text), ("up", &text_up)] {
+            let missing: Vec<u32> = (1..=60)
+                .filter(|n| !text.contains(&format!("Message {n}:")))
+                .collect();
+            eprintln!(
+                "{name}: {} lines, misread {missing:?}",
+                text.lines().count()
+            );
+            assert!(missing.len() <= 2, "{name} misread {missing:?}");
+        }
     }
 }

@@ -5,10 +5,12 @@ mod export;
 mod hotkeys;
 #[cfg(target_os = "macos")]
 mod menu;
+mod ocr;
 mod platform;
 mod quick_save;
 mod scrolling;
 mod settings;
+mod stitch;
 mod system_shortcuts;
 mod tray;
 mod window_list;

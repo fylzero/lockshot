@@ -365,6 +365,32 @@ const EDITOR_KEYS = [
               </select>
             </div>
           </div>
+          <div class="row">
+            <div class="row-label">
+              Save
+              <small>
+                The long image joins the pages into one tall picture, without the overlap. Very long threads are split
+                into parts of about 30,000 pixels. It is a PNG, or a JPEG when that is your default format.
+              </small>
+            </div>
+            <div class="row-control">
+              <select v-model="settings.scrollOutput" @change="saveSettingsSoon">
+                <option value="both">Pages and a long image</option>
+                <option value="image">Just the long image</option>
+                <option value="pages">Just the pages</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="env.os === 'macos'" class="row">
+            <div class="row-label">
+              Save the text
+              <small>Reads the messages off the pages into Text.txt, on this Mac. Adds a few seconds at the end of a long run.</small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.scrollText" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
         </div>
 
         <div class="card">

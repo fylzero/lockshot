@@ -43,7 +43,7 @@ function sampleImage() {
 
 /** #toast, #toast-error, #toast-scrolling (in progress) or #toast-scrolled (done). */
 function sampleToast(kind: string) {
-  const none = { pages: null, running: false, note: null };
+  const none = { pages: null, running: false, note: null, title: null };
   if (kind.includes("error")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail: null, copied: false,
       error: "Could not write the image: Permission denied (os error 13)", ...none };
@@ -63,12 +63,12 @@ function sampleToast(kind: string) {
   const thumbnail = { width, height, data: Array.from(g.getImageData(0, 0, width, height).data) };
   if (kind.includes("scrolling")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail, copied: false, error: null,
-      pages: 12, running: true, note: null };
+      pages: 12, running: true, note: null, title: null };
   }
   if (kind.includes("scrolled")) {
     return { id: "t1", capture: null, path: "/Users/demo/Pictures/Screenshot-2026-11-20-18.04.29 Scrolling",
       fileName: "Screenshot-2026-11-20-18.04.29 Scrolling", thumbnail, copied: false, error: null,
-      pages: 37, running: false, note: "Reached the end" };
+      pages: 37, running: false, note: "Reached the end", title: "Saved 37 pages, a long image and the text" };
   }
   return {
     ...none,
@@ -105,6 +105,8 @@ export function installMock() {
     scrollDirection: "down",
     scrollDelayMs: 500,
     scrollMaxPages: 200,
+    scrollOutput: "both",
+    scrollText: false,
     launchAtLogin: true,
     keepRunningInBackground: true,
     theme: "system",

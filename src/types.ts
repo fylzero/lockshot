@@ -4,6 +4,7 @@ export type ExportFormat = "png" | "jpg" | "heic" | "tiff" | "gif" | "bmp" | "pd
 export type HotkeyAction = "area" | "window" | "scroll" | "screen" | "editor";
 export type CaptureMode = "area" | "window" | "scroll" | "screen";
 export type ScrollDirection = "down" | "up";
+export type ScrollOutput = "both" | "image" | "pages";
 export type OsName = "macos" | "windows" | "linux";
 
 export interface Hotkeys {
@@ -31,6 +32,10 @@ export interface Settings {
   scrollDelayMs: number;
   /** Stop after this many pages (2–1000). */
   scrollMaxPages: number;
+  /** Save the pages and a long image of them, just the image, or just the pages. */
+  scrollOutput: ScrollOutput;
+  /** Also read the text off the pages into Text.txt (macOS). */
+  scrollText: boolean;
   launchAtLogin: boolean;
   /** macOS: Cmd+Q hides the window and leaves Lockshot in the menu bar. */
   keepRunningInBackground: boolean;
@@ -104,6 +109,8 @@ export interface SaveToast {
   running: boolean;
   /** Why a Scrolling Capture ended. */
   note: string | null;
+  /** What a finished Scrolling Capture saved, such as "Saved 12 pages and a long image". */
+  title: string | null;
 }
 
 export interface PermissionStatus {

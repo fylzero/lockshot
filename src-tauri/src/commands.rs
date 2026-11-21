@@ -64,6 +64,9 @@ pub fn update_settings(
     if !settings::SCROLL_DIRECTIONS.contains(&next.scroll_direction.as_str()) {
         next.scroll_direction = "down".into();
     }
+    if !settings::SCROLL_OUTPUTS.contains(&next.scroll_output.as_str()) {
+        next.scroll_output = "both".into();
+    }
     next.scroll_delay_ms = next.scroll_delay_ms.clamp(
         *settings::SCROLL_DELAY_MS.start(),
         *settings::SCROLL_DELAY_MS.end(),

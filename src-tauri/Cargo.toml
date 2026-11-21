@@ -38,6 +38,9 @@ enigo = { version = "0.6", features = ["platform_specific"] }
 objc2 = "0.6"
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFCGTypes", "CFDictionary", "CFNumber", "CFString"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGGeometry", "CGWindow"] }
+# Text from Scrolling Capture pages, read with Apple Vision.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSDictionary", "NSString", "NSError", "NSValue"] }
+objc2-vision = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "VNRequest", "VNRequestHandler", "VNRecognizeTextRequest", "VNObservation", "VNTypes", "VNUtils"] }
 plist = "1"
 
 [target.'cfg(target_os = "windows")'.dependencies]

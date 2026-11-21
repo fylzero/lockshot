@@ -55,6 +55,9 @@ pub struct Toast {
     running: bool,
     /// Why a Scrolling Capture ended, such as "Reached the end".
     note: Option<String>,
+    /// What a finished Scrolling Capture saved, such as "Saved 12 pages
+    /// and a long image".
+    title: Option<String>,
 }
 
 #[derive(Default)]
@@ -321,6 +324,7 @@ pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage) {
 pub fn show_scroll_done(
     app: &AppHandle,
     dir: String,
+    title: String,
     pages: u32,
     first: Option<RgbaImage>,
     note: String,
@@ -337,6 +341,7 @@ pub fn show_scroll_done(
             thumbnail: first.as_ref().map(thumbnail),
             pages: Some(pages),
             note: Some(note),
+            title: Some(title),
             ..Default::default()
         },
     );
