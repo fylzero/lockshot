@@ -27,6 +27,28 @@ pub fn available() -> bool {
     imp::available()
 }
 
+/**
+ * Read a small built-in picture of text, so the first Scrolling Capture
+ * after an install or update does not wait on Vision. macOS loads its text
+ * models the first time each new build of the app reads text, which took
+ * 15 to 50 seconds in testing; after that, a page takes a fraction of a
+ * second. The picture needs real text: a blank one only loads half of it.
+ */
+pub fn warm_up() {
+    if !available() {
+        return;
+    }
+    let bytes = include_bytes!("../assets/ocr-warmup.png");
+    match image::load_from_memory(bytes) {
+        Ok(picture) => {
+            if let Err(err) = imp::recognize(&picture.to_rgba8()) {
+                eprintln!("Could not warm up text reading: {err}");
+            }
+        }
+        Err(err) => eprintln!("Could not load the text warm-up picture: {err}"),
+    }
+}
+
 /// A piece of text found in an image, in pixels from its top left.
 #[derive(Clone, Debug)]
 pub struct Found {
@@ -295,6 +317,21 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Slow the first time a new test build runs: that is what it saves.
+    #[test]
+    #[ignore]
+    fn warm_up_picture_has_text_to_read() {
+        if !available() {
+            return;
+        }
+        let picture = image::load_from_memory(include_bytes!("../assets/ocr-warmup.png"))
+            .unwrap()
+            .to_rgba8();
+        let found = imp::recognize(&picture).unwrap();
+        let text: Vec<_> = found.iter().map(|f| f.text.as_str()).collect();
+        assert!(text.join(" ").contains("Lockshot"), "{text:?}");
+    }
 
     fn at(text: &str, x: f64, y: f64) -> Found {
         Found {

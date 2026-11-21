@@ -153,10 +153,15 @@ pub fn run() {
             tray::build(&handle, &settings)?;
             /* Build the capture overlays ahead of time so area capture opens instantly. */
             let warm = handle.clone();
+            let warm_text = settings.scroll_text;
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(800));
                 capture::prewarm(&warm);
                 quick_save::prewarm(&warm);
+                /* Slow only the first time a new build reads text. */
+                if warm_text {
+                    ocr::warm_up();
+                }
             });
 
             let first_run = !settings.onboarded;

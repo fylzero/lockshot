@@ -6,7 +6,9 @@
 //!
 //! The scroll is a real scroll-wheel event sent with the pointer in the
 //! middle of the area, so it reaches the pane under it whether or not the
-//! window has keyboard focus. Every run goes to its own folder of numbered
+//! window has keyboard focus. If nothing under the middle scrolls (the area
+//! takes in a still window or a header too), other spots in the area are
+//! tried until one does. Every run goes to its own folder of numbered
 //! files, and the pages are joined into one long image as they come in (see
 //! stitch.rs); on macOS the text can be read off them too (see ocr.rs).
 //! Esc, the Stop button, or moving the mouse ends it early.
@@ -67,13 +69,33 @@ pub struct Target {
     pub height: u32,
 }
 
+/// Where in the area to try scrolling, as fractions of its width and
+/// height: the middle first, then the middle of each side's half, then the
+/// quarters, until one of them moves the content.
+const SPOTS: [(f64, f64); 9] = [
+    (0.5, 0.5),
+    (0.5, 0.75),
+    (0.5, 0.25),
+    (0.25, 0.5),
+    (0.75, 0.5),
+    (0.25, 0.75),
+    (0.75, 0.75),
+    (0.25, 0.25),
+    (0.75, 0.25),
+];
+
 impl Target {
-    /// The middle of the area on the desktop, where the scroll goes.
-    fn point(&self) -> (i32, i32) {
-        (
-            self.display.0 + (self.x + self.width / 2) as i32,
-            self.display.1 + (self.y + self.height / 2) as i32,
-        )
+    /// The spots to try scrolling at, on the desktop, best first.
+    fn spots(&self) -> Vec<(i32, i32)> {
+        SPOTS
+            .iter()
+            .map(|&(fx, fy)| {
+                (
+                    self.display.0 + self.x as i32 + (self.width as f64 * fx).round() as i32,
+                    self.display.1 + self.y as i32 + (self.height as f64 * fy).round() as i32,
+                )
+            })
+            .collect()
     }
 }
 
@@ -242,7 +264,9 @@ impl Step {
 fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let settings = app.state::<AppState>().settings.lock().unwrap().clone();
     let monitor = find_display(target.display)?;
-    let point = target.point();
+    let spots = target.spots();
+    let mut spot = 0;
+    let mut point = spots[0];
     frame::show(
         app,
         frame::Area {
@@ -298,6 +322,9 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let mut step = Step::new(target.height as f64, scale);
     let mut stalls = 0;
     let mut placed = false;
+    /* Whether anything has scrolled yet: until then a scroll that moves
+    nothing means the spot is wrong, not that the end was reached. */
+    let mut scrolled = false;
     let note;
     loop {
         if STOP.load(Ordering::SeqCst) {
@@ -354,9 +381,25 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             }
         ));
         if matches!(change, Change::Same) {
+            if !scrolled && spot + 1 < spots.len() {
+                spot += 1;
+                point = spots[spot];
+                /* The pointer is still at the last spot until the next turn
+                moves it, so do not take that for the user moving it. */
+                placed = false;
+                debug_log(&format!("nothing scrolled there: trying spot {spot}"));
+                continue;
+            }
+            if !scrolled {
+                /* No spot moved anything: one last, longer try in the middle. */
+                point = spots[0];
+                placed = false;
+            }
             stalls += 1;
             if stalls >= 2 {
-                note = if up {
+                note = if !scrolled {
+                    "Nothing in the area scrolled".to_string()
+                } else if up {
                     "Reached the top".to_string()
                 } else {
                     "Reached the end".to_string()
@@ -366,6 +409,7 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             continue;
         }
         stalls = 0;
+        scrolled = true;
         let pane = match &change {
             Change::Moved(shift) => {
                 step.adjust(shift.moved, shift.pane);
@@ -854,6 +898,23 @@ mod tests {
         match compare(&before, &after, false, Some(84)) {
             Change::Moved(shift) => assert_eq!(shift.moved, 90),
             _ => panic!("expected a move"),
+        }
+    }
+
+    #[test]
+    fn spots_start_in_the_middle_and_stay_inside() {
+        let target = Target {
+            display: (100, 50),
+            x: 200,
+            y: 100,
+            width: 400,
+            height: 800,
+        };
+        let spots = target.spots();
+        assert_eq!(spots[0], (500, 550));
+        assert_eq!(spots[1], (500, 750));
+        for (x, y) in spots {
+            assert!((300..700).contains(&x) && (150..950).contains(&y));
         }
     }
 
