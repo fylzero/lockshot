@@ -7,6 +7,7 @@ import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
 import { env, openImageFile, saveSettingsSoon, settings, showToast } from "../store";
 import { acceleratorKeys, pcKeyboardPreset, systemPreset } from "../hotkeys";
+import { fileManagerName } from "../platform";
 import type { CaptureMode, HotkeyAction, PermissionStatus } from "../types";
 
 /*
@@ -55,6 +56,21 @@ onMounted(async () => {
 async function capture(mode: CaptureMode) {
   try {
     await api.capture(mode);
+  } catch (err) {
+    showToast(errorMessage(err), "error");
+  }
+}
+
+/* Where captures land: the folder for saves without editing while that's on. */
+const captureFolder = computed(() => {
+  const s = settings.value;
+  if (!s) return env.defaultSaveDir;
+  return (s.quickSave && s.quickSaveDir) || s.saveDir || env.defaultSaveDir;
+});
+
+async function openCaptureFolder() {
+  try {
+    await api.openFolder(captureFolder.value);
   } catch (err) {
     showToast(errorMessage(err), "error");
   }
@@ -215,9 +231,13 @@ async function usePreset(which = preset.value) {
           </button>
         </div>
         <button class="open-image" @click="openImageFile">
-          <Icon name="folder" />
+          <Icon name="image" />
           <strong>Open image…</strong>
           <span class="muted">or drop one here</span>
+        </button>
+        <button class="link open-folder" :title="captureFolder" @click="openCaptureFolder">
+          <Icon name="folder" />
+          Open screenshot folder in {{ fileManagerName }}
         </button>
       </template>
     </div>

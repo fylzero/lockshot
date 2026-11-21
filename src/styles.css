@@ -439,6 +439,15 @@ a {
   color: var(--accent-text);
 }
 
+button.link.open-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: center;
+  margin-top: -0.5rem;
+  font-size: 0.9rem;
+}
+
 /* ---- Editor ---- */
 
 .editor {

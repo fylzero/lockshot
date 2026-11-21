@@ -346,6 +346,16 @@ pub fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
         .map_err(|err| format!("Could not show the file: {err}"))
 }
 
+/// Open a folder in Finder, File Explorer or the file manager, creating it
+/// first if nothing has been saved there yet.
+#[tauri::command]
+pub fn open_folder(app: AppHandle, path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|err| format!("Could not create the folder: {err}"))?;
+    app.opener()
+        .open_path(&path, None::<&str>)
+        .map_err(|err| format!("Could not open the folder: {err}"))
+}
+
 #[tauri::command]
 pub fn reveal_settings_file(app: AppHandle) -> Result<(), String> {
     let path = settings::path(&app)?;

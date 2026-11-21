@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     notes: [
       "Selected text in a text box keeps its color while you edit it, with a light highlight behind it, instead of turning white and blending into a white outline.",
       "Selected text now shows a resize dot on its lower-right corner, so you can make it bigger or smaller without opening it for editing first.",
+      "Home has an Open screenshot folder link under Open image… that opens the folder your captures go to in Finder, File Explorer or your file manager. The folder settings have an Open button too.",
     ],
   },
   {

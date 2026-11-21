@@ -203,6 +203,7 @@ pub fn run() {
             commands::drag_image,
             commands::reveal_path,
             commands::reveal_settings_file,
+            commands::open_folder,
             commands::settings_json,
             commands::apply_settings_json,
             commands::import_settings_json,

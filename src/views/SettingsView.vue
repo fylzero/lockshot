@@ -44,6 +44,10 @@ const preview = computed(() =>
   formatFilename(settings.value?.filenameTemplate ?? DEFAULT_TEMPLATE, new Date(), { width: 1440, height: 900 }),
 );
 
+function openFolder(path: string) {
+  api.openFolder(path).catch((err) => showToast(errorMessage(err), "error"));
+}
+
 async function chooseFolder() {
   const picked = await open({ directory: true, defaultPath: settings.value?.saveDir || env.defaultSaveDir });
   if (typeof picked === "string" && settings.value) {
@@ -254,6 +258,7 @@ const EDITOR_KEYS = [
             </div>
             <div class="row-control">
               <button v-if="settings.saveDir" class="ghost" @click="settings.saveDir = ''; saveSettingsSoon()">Use default</button>
+              <button class="ghost" :title="`Open in ${fileManagerName}`" @click="openFolder(settings.saveDir || env.defaultSaveDir)">Open</button>
               <button @click="chooseFolder"><Icon name="folder" /> Choose…</button>
             </div>
           </div>
@@ -321,6 +326,9 @@ const EDITOR_KEYS = [
             <div class="row-control">
               <button v-if="settings.quickSaveDir" class="ghost" @click="settings.quickSaveDir = ''; saveSettingsSoon()">
                 Use save folder
+              </button>
+              <button class="ghost" :title="`Open in ${fileManagerName}`" @click="openFolder(settings.quickSaveDir || settings.saveDir || env.defaultSaveDir)">
+                Open
               </button>
               <button @click="chooseQuickSaveFolder"><Icon name="folder" /> Choose…</button>
             </div>

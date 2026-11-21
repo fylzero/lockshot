@@ -34,6 +34,7 @@ export const api = {
   releaseCapture: (id: string) => invoke<void>("release_capture", { id }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   revealSettingsFile: () => invoke<void>("reveal_settings_file"),
+  openFolder: (path: string) => invoke<void>("open_folder", { path }),
   settingsJson: () => invoke<string>("settings_json"),
   applySettingsJson: (raw: string) => invoke<Settings>("apply_settings_json", { raw }),
   importSettingsJson: (path: string) => invoke<string>("import_settings_json", { path }),
