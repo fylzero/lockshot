@@ -64,9 +64,9 @@ onBeforeUnmount(() => clearInterval(poll));
     <div v-else-if="status.os === 'macos' && props.embedded" class="permission-steps">
       <p class="muted">macOS hides other apps' windows from screenshots until you allow it. It's a one-time switch.</p>
       <ol class="steps">
-        <li>Click <strong>Allow access</strong>. macOS shows a prompt the first time, or opens System Settings.</li>
+        <li>Click <strong>Allow access</strong>. System Settings opens on the Screen Recording list (the first time, macOS may ask first: click <strong>Open System Settings</strong> in its prompt).</li>
         <li>
-          Under <em>Privacy &amp; Security › Screen &amp; System Audio Recording</em>, turn on <strong>Lockshot</strong>.
+          Turn on the switch next to <strong>Lockshot</strong>.
           <button class="link" @click="openSettings">Open System Settings</button>
         </li>
         <li>macOS applies the change after a relaunch, so click <strong>Relaunch Lockshot</strong>.</li>
@@ -85,8 +85,8 @@ onBeforeUnmount(() => clearInterval(poll));
           macOS hides other apps' windows from screenshots until you allow it. It's a one-time switch.
         </p>
         <ol class="steps">
-          <li>Click <strong>Allow access</strong>. macOS shows a prompt the first time, or opens System Settings.</li>
-          <li>Under <em>Privacy &amp; Security › Screen &amp; System Audio Recording</em>, turn on <strong>Lockshot</strong>.</li>
+          <li>Click <strong>Allow access</strong>. System Settings opens on the Screen Recording list (the first time, macOS may ask first: click <strong>Open System Settings</strong> in its prompt).</li>
+          <li>Turn on the switch next to <strong>Lockshot</strong>.</li>
           <li>macOS applies the change after a relaunch, so click <strong>Relaunch Lockshot</strong>.</li>
         </ol>
         <div class="notice-actions">

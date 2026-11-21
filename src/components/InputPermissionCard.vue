@@ -61,8 +61,8 @@ onBeforeUnmount(() => clearInterval(poll));
           Accessibility. The other captures don't need it.
         </p>
         <ol class="steps">
-          <li>Click <strong>Allow access</strong>. macOS shows a prompt the first time, or opens System Settings.</li>
-          <li>Under <em>Privacy &amp; Security › Accessibility</em>, turn on <strong>Lockshot</strong>.</li>
+          <li>Click <strong>Allow access</strong>. System Settings opens on the Accessibility list (the first time, macOS may ask first: click <strong>Open System Settings</strong> in its prompt).</li>
+          <li>Turn on the switch next to <strong>Lockshot</strong>.</li>
         </ol>
         <div class="notice-actions">
           <button class="primary" @click="grant"><Icon name="shield" /> Allow access</button>
