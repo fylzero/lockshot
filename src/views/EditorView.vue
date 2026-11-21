@@ -799,6 +799,7 @@ const textStyle = computed(() => {
     top: `${box.top}px`,
     fontSize: `${box.fontSize}px`,
     color: t.color,
+    "--text-color": t.color,
     fontFamily: TEXT_FONT,
     lineHeight: String(TEXT_LINE_HEIGHT),
     width: `${box.width}px`,

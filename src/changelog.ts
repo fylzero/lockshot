@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.2.1",
+    date: "November 21, 2026",
+    notes: [
+      "Selected text in a text box keeps its color while you edit it, with a light highlight behind it, instead of turning white and blending into a white outline.",
+    ],
+  },
+  {
     version: "1.2.0",
     date: "November 20, 2026",
     notes: [

@@ -787,6 +787,14 @@ a {
   paint-order: stroke fill;
 }
 
+/* WebKit paints selected text in the system highlight text color (white),
+   which melts into a white outline. Keep the shape's own color and use a
+   translucent tint so the selection still reads. */
+.text-entry::selection {
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .text-resize {
   position: absolute;
   width: 12px;
