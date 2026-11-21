@@ -12,7 +12,9 @@ import type { OverlayStart, WindowTarget } from "./types";
  * made once, kept hidden between captures, and told about each new capture
  * with an "overlay-start" event, so it can appear without loading a page
  * first. In window mode it highlights the window under the pointer instead
- * of drawing a selection, and a click captures that window.
+ * of drawing a selection, and a click captures that window. Scroll mode
+ * (Scrolling Capture) picks a window the same way, and the spot clicked is
+ * where Lockshot scrolls, so it reaches the right pane.
  */
 
 const win = getCurrentWindow();
@@ -26,10 +28,12 @@ const finishing = ref(false);
 const mode = ref<OverlayStart["mode"]>("area");
 const windows = ref<WindowTarget[]>([]);
 
+const picksWindow = computed(() => mode.value === "window" || mode.value === "scroll");
+
 /** Capture Window: the frontmost window under the pointer, in CSS pixels. */
 const hovered = computed(() => {
   const p = pointer.value;
-  if (mode.value !== "window" || !p) return null;
+  if (!picksWindow.value || !p) return null;
   const W = window.innerWidth;
   const H = window.innerHeight;
   const target = windows.value.find(
@@ -121,7 +125,7 @@ async function begin(next: OverlayStart) {
     const [cursor, pos, size] = await Promise.all([cursorPosition(), win.outerPosition(), win.outerSize()]);
     const inside = cursor.x >= pos.x && cursor.y >= pos.y && cursor.x < pos.x + size.width && cursor.y < pos.y + size.height;
     /* Highlight the window under the pointer before it first moves. */
-    if (inside && mode.value === "window" && !pointer.value) {
+    if (inside && picksWindow.value && !pointer.value) {
       const scale = size.width / window.innerWidth;
       pointer.value = { x: (cursor.x - pos.x) / scale, y: (cursor.y - pos.y) / scale };
     }
@@ -143,7 +147,7 @@ function onPointerDown(event: PointerEvent) {
     return;
   }
   if (event.button !== 0) return;
-  if (mode.value === "window") {
+  if (picksWindow.value) {
     pointer.value = { x: event.clientX, y: event.clientY };
     void pickWindow();
     return;
@@ -177,8 +181,13 @@ async function pickWindow() {
   const target = hovered.value?.target;
   if (!target || finishing.value) return;
   finishing.value = true;
+  const p = pointer.value!;
   try {
-    await api.finishWindow(session.value, target.id);
+    if (mode.value === "scroll") {
+      await api.finishScroll(session.value, target.id, p.x / window.innerWidth, p.y / window.innerHeight);
+    } else {
+      await api.finishWindow(session.value, target.id);
+    }
   } catch (err) {
     void emitTo("main", "capture-error", typeof err === "string" ? err : "Lockshot couldn't capture that window.");
     await api.cancelArea();
@@ -214,7 +223,7 @@ onBeforeUnmount(() => {
     @pointerleave="!start && (pointer = null)"
   >
     <canvas ref="canvas" class="overlay-image" />
-    <template v-if="loaded && mode === 'window'">
+    <template v-if="loaded && picksWindow">
       <template v-if="hovered">
         <div
           class="overlay-window"
@@ -226,7 +235,8 @@ onBeforeUnmount(() => {
         </div>
       </template>
       <div class="overlay-hint">
-        <span v-if="windows.length">Click a window to capture it</span>
+        <span v-if="windows.length && mode === 'scroll'">Click inside the part of a window to scroll</span>
+        <span v-else-if="windows.length">Click a window to capture it</span>
         <span v-else>No windows to capture on this display</span>
         <span><kbd>Esc</kbd> to cancel</span>
       </div>

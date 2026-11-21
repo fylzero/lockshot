@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager};
 const SETTINGS_FILE: &str = "settings.json";
 
 /// The actions a global hotkey can trigger.
-pub const ACTIONS: [&str; 4] = ["area", "window", "screen", "editor"];
+pub const ACTIONS: [&str; 5] = ["area", "window", "scroll", "screen", "editor"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -16,6 +16,9 @@ pub struct Hotkeys {
     pub area: String,
     /// Click a window to capture just that window.
     pub window: String,
+    /// Scrolling Capture: click a window and it is scrolled and captured a
+    /// page at a time.
+    pub scroll: String,
     /// The whole screen under the pointer.
     pub screen: String,
     /// Bring the Lockshot window forward.
@@ -33,6 +36,7 @@ impl Default for Hotkeys {
         Self {
             area: "Alt+Shift+4".into(),
             window: "Alt+Shift+5".into(),
+            scroll: "Alt+Shift+6".into(),
             screen: "Alt+Shift+3".into(),
             editor: "Alt+Shift+L".into(),
         }
@@ -44,6 +48,7 @@ impl Hotkeys {
         match action {
             "area" => Some(&self.area),
             "window" => Some(&self.window),
+            "scroll" => Some(&self.scroll),
             "screen" => Some(&self.screen),
             "editor" => Some(&self.editor),
             _ => None,
@@ -54,6 +59,7 @@ impl Hotkeys {
         match action {
             "area" => self.area = value,
             "window" => self.window = value,
+            "scroll" => self.scroll = value,
             "screen" => self.screen = value,
             "editor" => self.editor = value,
             _ => return false,
@@ -79,6 +85,13 @@ pub struct Settings {
     pub quick_save: bool,
     /// Where those files go. Empty means the save folder.
     pub quick_save_dir: String,
+    /// Scrolling Capture: "down" towards the end, or "up" towards the top
+    /// (older messages in most chat apps).
+    pub scroll_direction: String,
+    /// How long to wait after each scroll for the app to draw, in ms.
+    pub scroll_delay_ms: u32,
+    /// Stop after this many pages, so an endless feed cannot fill the disk.
+    pub scroll_max_pages: u32,
     /// Start Lockshot in the tray when the user logs in.
     pub launch_at_login: bool,
     /// macOS: Cmd+Q closes the window and leaves Lockshot in the menu bar,
@@ -103,6 +116,9 @@ impl Default for Settings {
             copy_on_capture: false,
             quick_save: false,
             quick_save_dir: String::new(),
+            scroll_direction: "down".into(),
+            scroll_delay_ms: 500,
+            scroll_max_pages: 200,
             launch_at_login: true,
             keep_running_in_background: true,
             theme: "system".into(),
@@ -150,6 +166,9 @@ pub fn to_json(settings: &Settings) -> Result<String, String> {
 }
 
 pub const THEMES: [&str; 3] = ["system", "light", "dark"];
+pub const SCROLL_DIRECTIONS: [&str; 2] = ["down", "up"];
+pub const SCROLL_DELAY_MS: std::ops::RangeInclusive<u32> = 100..=5000;
+pub const SCROLL_MAX_PAGES: std::ops::RangeInclusive<u32> = 2..=1000;
 pub const SETUP_STEPS: [&str; 4] = ["", "permission", "hotkeys", "tray"];
 
 /**
@@ -188,6 +207,15 @@ pub fn from_json(raw: &str) -> Result<Settings, String> {
     }
     if !THEMES.contains(&settings.theme.as_str()) {
         return Err(format!("\"theme\" must be one of {}.", THEMES.join(", ")));
+    }
+    if !SCROLL_DIRECTIONS.contains(&settings.scroll_direction.as_str()) {
+        return Err("\"scrollDirection\" must be \"down\" or \"up\".".into());
+    }
+    if !SCROLL_DELAY_MS.contains(&settings.scroll_delay_ms) {
+        return Err("\"scrollDelayMs\" must be between 100 and 5000.".into());
+    }
+    if !SCROLL_MAX_PAGES.contains(&settings.scroll_max_pages) {
+        return Err("\"scrollMaxPages\" must be between 2 and 1000.".into());
     }
     if !SETUP_STEPS.contains(&settings.setup_step.as_str()) {
         return Err("\"setupStep\" must be \"permission\", \"hotkeys\", \"tray\" or empty.".into());
@@ -299,8 +327,8 @@ mod tests {
             "\"fromat\" is not a Lockshot setting."
         );
         assert_eq!(
-            from_json(r#"{ "hotkeys": { "scroll": "Alt+W" } }"#).unwrap_err(),
-            "\"hotkeys.scroll\" is not a Lockshot setting."
+            from_json(r#"{ "hotkeys": { "zoom": "Alt+W" } }"#).unwrap_err(),
+            "\"hotkeys.zoom\" is not a Lockshot setting."
         );
     }
 
@@ -315,6 +343,9 @@ mod tests {
         assert!(from_json(r#"{ "launchAtLogin": 1 }"#).is_err());
         assert!(from_json(r#"{ "keepRunningInBackground": "no" }"#).is_err());
         assert!(from_json(r#"{ "quickSave": "on" }"#).is_err());
+        assert!(from_json(r#"{ "scrollDirection": "left" }"#).is_err());
+        assert!(from_json(r#"{ "scrollDelayMs": 10 }"#).is_err());
+        assert!(from_json(r#"{ "scrollMaxPages": 0 }"#).is_err());
         assert!(from_json("[]").is_err());
     }
 }

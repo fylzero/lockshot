@@ -304,7 +304,7 @@ a {
 }
 
 .home-inner {
-  width: min(42rem, 100%);
+  width: min(48rem, 100%);
   /* Centered when there's room; auto margins never clip the top on overflow. */
   margin-block: auto;
   display: flex;
@@ -380,8 +380,15 @@ a {
 
 .capture-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  /* Four in a row at full width, two by two when the window is narrow. */
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.85rem;
+}
+
+@media (max-width: 52rem) {
+  .capture-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .capture-card {

@@ -26,6 +26,7 @@ pub fn menu(app: &AppHandle, settings: &Settings) -> tauri::Result<Menu<Wry>> {
         &[
             &item(app, "area", "Capture Area", &hotkeys.area)?,
             &item(app, "window", "Capture Window", &hotkeys.window)?,
+            &item(app, "scroll", "Scrolling Capture", &hotkeys.scroll)?,
             &item(app, "screen", "Capture Screen", &hotkeys.screen)?,
             &PredefinedMenuItem::separator(app)?,
             &CheckMenuItem::with_id(

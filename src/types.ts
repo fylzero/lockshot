@@ -1,13 +1,15 @@
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 export type ExportFormat = "png" | "jpg" | "heic" | "tiff" | "gif" | "bmp" | "pdf";
-export type HotkeyAction = "area" | "window" | "screen" | "editor";
-export type CaptureMode = "area" | "window" | "screen";
+export type HotkeyAction = "area" | "window" | "scroll" | "screen" | "editor";
+export type CaptureMode = "area" | "window" | "scroll" | "screen";
+export type ScrollDirection = "down" | "up";
 export type OsName = "macos" | "windows" | "linux";
 
 export interface Hotkeys {
   area: string;
   window: string;
+  scroll: string;
   screen: string;
   editor: string;
 }
@@ -23,6 +25,12 @@ export interface Settings {
   quickSave: boolean;
   /** Where those files go; empty means the save folder. */
   quickSaveDir: string;
+  /** Scrolling Capture: towards the end, or towards the top (older messages). */
+  scrollDirection: ScrollDirection;
+  /** Wait after each scroll for the app to draw, in ms (100–5000). */
+  scrollDelayMs: number;
+  /** Stop after this many pages (2–1000). */
+  scrollMaxPages: number;
   launchAtLogin: boolean;
   /** macOS: Cmd+Q hides the window and leaves Lockshot in the menu bar. */
   keepRunningInBackground: boolean;
@@ -75,7 +83,8 @@ export interface OverlayStart {
   index: number;
   width: number;
   height: number;
-  mode: "area" | "window";
+  /** "scroll" picks a window like "window", and the click sets where it scrolls. */
+  mode: "area" | "window" | "scroll";
   /** Front to back; empty for an area capture. */
   windows: WindowTarget[];
 }
@@ -89,10 +98,18 @@ export interface SaveToast {
   thumbnail: { width: number; height: number; data: number[] } | null;
   copied: boolean;
   error: string | null;
+  /** Scrolling Capture: pages saved so far, or in all once done. */
+  pages: number | null;
+  /** Scrolling Capture is still going. */
+  running: boolean;
+  /** Why a Scrolling Capture ended. */
+  note: string | null;
 }
 
 export interface PermissionStatus {
   screen: "granted" | "denied" | "not-required";
   os: OsName;
   wayland: boolean;
+  /** Scrolling Capture's control of the mouse (macOS: Accessibility). */
+  input: "granted" | "denied" | "unsupported" | "not-required";
 }

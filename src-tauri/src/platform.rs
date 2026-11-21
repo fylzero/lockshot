@@ -12,6 +12,9 @@ pub struct PermissionStatus {
     pub os: &'static str,
     /// Linux sessions under Wayland, where global hotkeys cannot be grabbed.
     pub wayland: bool,
+    /// Scrolling Capture's control of the mouse: "granted", "denied" (macOS
+    /// Accessibility is off), "unsupported" (Wayland) or "not-required".
+    pub input: &'static str,
 }
 
 pub fn os_name() -> &'static str {
@@ -24,7 +27,7 @@ pub fn os_name() -> &'static str {
     }
 }
 
-fn is_wayland() -> bool {
+pub fn is_wayland() -> bool {
     cfg!(target_os = "linux")
         && (std::env::var_os("WAYLAND_DISPLAY").is_some()
             || std::env::var("XDG_SESSION_TYPE").is_ok_and(|v| v.eq_ignore_ascii_case("wayland")))
@@ -35,6 +38,7 @@ pub fn permission_status() -> PermissionStatus {
         screen: screen_permission(),
         os: os_name(),
         wayland: is_wayland(),
+        input: input_permission(),
     }
 }
 
@@ -53,6 +57,15 @@ mod mac {
     extern "C" {
         pub fn CGPreflightScreenCaptureAccess() -> bool;
         pub fn CGRequestScreenCaptureAccess() -> bool;
+    }
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        pub fn AXIsProcessTrusted() -> bool;
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
         pub fn CGEventCreate(source: *const c_void) -> *mut c_void;
         pub fn CGEventGetLocation(event: *mut c_void) -> CGPoint;
     }
@@ -75,6 +88,52 @@ fn screen_permission() -> &'static str {
 #[cfg(not(target_os = "macos"))]
 fn screen_permission() -> &'static str {
     "not-required"
+}
+
+/**
+ * Whether Scrolling Capture may move the pointer and scroll. macOS asks for
+ * Accessibility access before an app can send input to others; Wayland does
+ * not let apps do it at all.
+ */
+#[cfg(target_os = "macos")]
+pub fn input_permission() -> &'static str {
+    if unsafe { mac::AXIsProcessTrusted() } {
+        "granted"
+    } else {
+        "denied"
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn input_permission() -> &'static str {
+    if is_wayland() {
+        "unsupported"
+    } else {
+        "not-required"
+    }
+}
+
+/// Show macOS's Accessibility prompt, which also adds Lockshot to the list
+/// in System Settings. Silent once the user has answered it.
+#[cfg(target_os = "macos")]
+pub fn request_input_permission() {
+    let settings = enigo::Settings {
+        open_prompt_to_get_permissions: true,
+        ..Default::default()
+    };
+    let _ = enigo::Enigo::new(&settings);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn request_input_permission() {}
+
+/// Windows: put the pointer at a point in physical pixels on the virtual
+/// desktop. enigo's own move only knows the primary display.
+#[cfg(target_os = "windows")]
+pub fn set_cursor(x: i32, y: i32) {
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetCursorPos(x, y);
+    }
 }
 
 /// Whether a capture would see other apps' windows rather than just the
@@ -249,6 +308,9 @@ pub fn settings_url(target: &str) -> Option<&'static str> {
     match (os_name(), target) {
         ("macos", "screen-recording") => {
             Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        }
+        ("macos", "accessibility") => {
+            Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         }
         ("macos", "keyboard-shortcuts") => {
             Some("x-apple.systempreferences:com.apple.preference.keyboard?Shortcuts")

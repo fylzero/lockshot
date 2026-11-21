@@ -61,6 +61,17 @@ pub fn update_settings(
         next.format = "png".into();
     }
     next.jpeg_quality = next.jpeg_quality.clamp(1, 100);
+    if !settings::SCROLL_DIRECTIONS.contains(&next.scroll_direction.as_str()) {
+        next.scroll_direction = "down".into();
+    }
+    next.scroll_delay_ms = next.scroll_delay_ms.clamp(
+        *settings::SCROLL_DELAY_MS.start(),
+        *settings::SCROLL_DELAY_MS.end(),
+    );
+    next.scroll_max_pages = next.scroll_max_pages.clamp(
+        *settings::SCROLL_MAX_PAGES.start(),
+        *settings::SCROLL_MAX_PAGES.end(),
+    );
     if next.launch_at_login != current.launch_at_login {
         autostart::apply(&app, next.launch_at_login)?;
     }
@@ -152,6 +163,7 @@ pub async fn capture(app: AppHandle, mode: String) -> Result<(), String> {
         "area" => capture::start_area(&app),
         "screen" => capture::capture_screen(&app),
         "window" => capture::start_window(&app),
+        "scroll" => capture::start_scroll(&app),
         _ => Err("Unknown capture mode.".into()),
     }
 }
@@ -179,6 +191,24 @@ pub fn finish_window(
     window_id: u32,
 ) -> Result<(), String> {
     capture::finish_window(&app, window.label(), &session, window_id)
+}
+
+#[tauri::command]
+pub fn finish_scroll(
+    app: AppHandle,
+    window: WebviewWindow,
+    session: String,
+    window_id: u32,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    capture::finish_scroll(&app, window.label(), &session, window_id, x, y)
+}
+
+/// The Stop button on the Scrolling Capture notice.
+#[tauri::command]
+pub fn scroll_stop() {
+    crate::scrolling::stop();
 }
 
 #[tauri::command]
@@ -406,6 +436,13 @@ pub fn permission_status() -> PermissionStatus {
 #[tauri::command]
 pub fn request_screen_permission() -> PermissionStatus {
     platform::request_screen_permission();
+    platform::permission_status()
+}
+
+/// Scrolling Capture on macOS: show the Accessibility prompt.
+#[tauri::command]
+pub fn request_input_permission() -> PermissionStatus {
+    platform::request_input_permission();
     platform::permission_status()
 }
 

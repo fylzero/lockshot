@@ -34,8 +34,10 @@ It's a sibling of [Shipyard](https://github.com/fylzero/shipyard) and [Recon](ht
 
 ## Features
 
-- **Menu bar / tray app**: Capture Area, Capture Screen, Hotkeys, Settings and Check for Updates are one click away. Closing the window keeps Lockshot running.
+- **Menu bar / tray app**: Capture Area, Capture Window, Scrolling Capture, Capture Screen, Hotkeys, Settings and Check for Updates are one click away. Closing the window keeps Lockshot running.
 - **Area capture**: Every display is frozen first, then you drag a selection over the frozen image, so menus and hover states stay put. Click without dragging for the whole screen. <kbd>Esc</kbd> or right-click cancels.
+- **Capture Window**: Click a window to capture just that window, even if others overlap it.
+- **Scrolling Capture**: Click inside a window and Lockshot scrolls it a page at a time, saving each page into a new folder (`001.png`, `002.png`, …) until the content stops moving. Made for backing up long Slack, Discord or Teams threads, whose virtualized message lists never hold the whole conversation at once. Scroll down to the end, or up to the top for a thread's history (numbered top to bottom either way). Press <kbd>Esc</kbd>, click Stop, or move the mouse to stop early. Set the direction, the wait after each scroll, and a page limit in **Settings › General**. On macOS it needs Accessibility permission to scroll other apps' windows; it isn't available under Wayland.
 - **Global hotkeys you can change**: Click a shortcut in Settings and press the new keys. Clashes with other Lockshot actions, or with combos another app owns, are caught and reported. A one-click preset takes over the system screenshot keys, with step-by-step instructions for freeing them on each OS.
 - **Guided permissions**: On macOS, Lockshot checks Screen Recording access before every capture. If it's missing, Lockshot opens the right System Settings pane and walks you through allowing it and relaunching.
 - **Home and Editor tabs**: Home walks you through setup one step at a time, then shows the capture buttons. Each capture or opened image gets its own Editor tab that keeps its annotations while you switch tabs; ⌘W / Ctrl+W closes tabs back to Home. Open images from Home, or drop a PNG, JPG, GIF, BMP, TIFF or HEIC file on the window.
@@ -51,6 +53,8 @@ It's a sibling of [Shipyard](https://github.com/fylzero/shipyard) and [Recon](ht
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |
 | Capture area | ⌥⇧4 | Alt+Shift+4 |
+| Capture window | ⌥⇧5 | Alt+Shift+5 |
+| Scrolling capture | ⌥⇧6 | Alt+Shift+6 |
 | Capture screen | ⌥⇧3 | Alt+Shift+3 |
 | Open Lockshot | ⌥⇧L | Alt+Shift+L |
 
@@ -64,7 +68,7 @@ These use the same digits as the macOS screenshot keys without fighting the syst
 
 Current macOS builds are **Apple Silicon only**. Releases are signed with a Developer ID certificate and notarized by Apple.
 
-On first launch, Lockshot asks for **Screen Recording** permission (*System Settings › Privacy & Security › Screen & System Audio Recording*). macOS applies it after a relaunch, which Lockshot offers to do for you. Because releases are signed with the same identity, the permission carries over to future updates. HEIC export uses the system encoder.
+On first launch, Lockshot asks for **Screen Recording** permission (*System Settings › Privacy & Security › Screen & System Audio Recording*). macOS applies it after a relaunch, which Lockshot offers to do for you. Because releases are signed with the same identity, the permission carries over to future updates. Scrolling Capture also asks for **Accessibility** (*Privacy & Security › Accessibility*) the first time you use it, so it can scroll the window you pick. HEIC export uses the system encoder.
 
 ### Windows (x64 and ARM64)
 

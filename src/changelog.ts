@@ -11,6 +11,8 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 20, 2026",
     notes: [
       "Capture Window (⌥⇧5): click a window to capture just that window.",
+      "Scrolling Capture (⌥⇧6): click inside a window and Lockshot scrolls it a page at a time, saving every page to a new folder until it reaches the end. Made for backing up long Slack, Discord and Teams threads. Scroll down, or up to save a thread's history. Esc, Stop or moving the mouse ends it early. Options are in Settings › General; on macOS it asks for Accessibility permission the first time.",
+      "Home shows all four capture buttons in one row.",
       "Save Without Editing: turn it on from the menu bar icon or Settings and every capture is saved straight to a file in your default format, without opening the editor. A small notice in the corner shows each one, with Edit to open it for markup. Pick a separate folder for these in Settings › General.",
       "Annotations are the same size on every screenshot. A size looks the same at 1:1 zoom whether the capture is a small area or a full Retina screen, instead of growing with the image.",
       "The back end of an arrow is rounded, like the Line tool.",

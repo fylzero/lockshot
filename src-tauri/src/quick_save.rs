@@ -36,8 +36,9 @@ pub struct Thumbnail {
     data: Vec<u8>,
 }
 
-/// What the toast window shows: a saved file, or why saving failed.
-#[derive(Clone, Serialize)]
+/// What the toast window shows: a saved file, a Scrolling Capture in
+/// progress or finished, or why saving failed.
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Toast {
     id: String,
@@ -48,6 +49,12 @@ pub struct Toast {
     thumbnail: Option<Thumbnail>,
     copied: bool,
     error: Option<String>,
+    /// Scrolling Capture: pages saved so far, or in all once it is done.
+    pages: Option<u32>,
+    /// Scrolling Capture is still going; the toast offers Stop.
+    running: bool,
+    /// Why a Scrolling Capture ended, such as "Reached the end".
+    note: Option<String>,
 }
 
 #[derive(Default)]
@@ -96,17 +103,13 @@ pub fn save(app: &AppHandle, image: RgbaImage, settings: Settings) {
                     path: Some(path.display().to_string()),
                     thumbnail: Some(thumbnail),
                     copied,
-                    error: None,
+                    ..Default::default()
                 }
             }
             Err(err) => Toast {
                 id,
-                capture: None,
-                path: None,
-                file_name: None,
-                thumbnail: None,
-                copied: false,
                 error: Some(err),
+                ..Default::default()
             },
         };
         show(&app, toast);
@@ -259,8 +262,18 @@ fn place(app: &AppHandle, window: &WebviewWindow) {
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
     let x = area.position.x as f64 + area.size.width as f64 - (TOAST_WIDTH + TOAST_MARGIN) * scale;
-    let y =
+    let mut y =
         area.position.y as f64 + area.size.height as f64 - (TOAST_HEIGHT + TOAST_MARGIN) * scale;
+    /*
+     * Never under the pointer: Scrolling Capture scrolls whatever is there,
+     * and the toast would catch the scroll. Go to the top corner instead.
+     */
+    if let Ok(p) = app.cursor_position() {
+        let (w, h) = (TOAST_WIDTH * scale, TOAST_HEIGHT * scale);
+        if p.x >= x && p.x < x + w && p.y >= y && p.y < y + h {
+            y = area.position.y as f64 + TOAST_MARGIN * scale;
+        }
+    }
     let _ = window.set_position(tauri::PhysicalPosition::new(
         x.round() as i32,
         y.round() as i32,
@@ -288,6 +301,56 @@ fn show(app: &AppHandle, toast: Toast) {
     place(app, &window);
     let _ = window.emit_to(TOAST_LABEL, "toast-show", &toast);
     let _ = window.show();
+}
+
+/// Scrolling Capture: how many pages are saved so far, with the latest.
+pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage) {
+    show(
+        app,
+        Toast {
+            id: uuid::Uuid::new_v4().to_string(),
+            thumbnail: Some(thumbnail(latest)),
+            pages: Some(pages),
+            running: true,
+            ..Default::default()
+        },
+    );
+}
+
+/// Scrolling Capture finished: the folder of pages, and why it stopped.
+pub fn show_scroll_done(
+    app: &AppHandle,
+    dir: String,
+    pages: u32,
+    first: Option<RgbaImage>,
+    note: String,
+) {
+    let file_name = std::path::Path::new(&dir)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned());
+    show(
+        app,
+        Toast {
+            id: uuid::Uuid::new_v4().to_string(),
+            path: Some(dir),
+            file_name,
+            thumbnail: first.as_ref().map(thumbnail),
+            pages: Some(pages),
+            note: Some(note),
+            ..Default::default()
+        },
+    );
+}
+
+pub fn show_error(app: &AppHandle, error: String) {
+    show(
+        app,
+        Toast {
+            id: uuid::Uuid::new_v4().to_string(),
+            error: Some(error),
+            ..Default::default()
+        },
+    );
 }
 
 /// The toast the window should show, for a page that just loaded.

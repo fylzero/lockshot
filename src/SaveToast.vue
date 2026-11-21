@@ -10,7 +10,9 @@ import type { SaveToast } from "./types";
  * The small floating notice ("toast") shown after a capture with Save
  * Without Editing on. Rust makes this window once, keeps it hidden between
  * captures, and tells it about each save with a "toast-show" event. It hides
- * itself after a few seconds, unless the pointer is over it.
+ * itself after a few seconds, unless the pointer is over it. During a
+ * Scrolling Capture it shows the page count and a Stop button, and stays up
+ * until the run ends.
  */
 
 const SHOW_MS = 5000;
@@ -36,7 +38,7 @@ async function present(next: SaveToast) {
 
 function restartTimer() {
   clearTimeout(timer);
-  if (hovering.value || !toast.value) return;
+  if (hovering.value || !toast.value || toast.value.running) return;
   timer = setTimeout(dismiss, toast.value.error ? ERROR_MS : SHOW_MS);
 }
 
@@ -48,6 +50,14 @@ function dismiss() {
 function edit() {
   clearTimeout(timer);
   if (toast.value?.capture) void api.toastEdit(toast.value.id);
+}
+
+function stop() {
+  void api.scrollStop();
+}
+
+function pageCount(n: number | null) {
+  return n === 1 ? "1 page" : `${n ?? 0} pages`;
 }
 
 function reveal() {
@@ -86,6 +96,28 @@ onBeforeUnmount(() => {
         <span class="detail">{{ toast.error }}</span>
       </div>
     </template>
+    <template v-else-if="toast.running">
+      <div class="thumb"><canvas ref="thumb" /></div>
+      <div class="body">
+        <strong>Scrolling capture · {{ pageCount(toast.pages) }}</strong>
+        <span class="detail">Press <kbd>Esc</kbd> or move the mouse to stop.</span>
+      </div>
+      <div class="actions">
+        <button class="primary" type="button" @click="stop">Stop</button>
+      </div>
+    </template>
+    <template v-else-if="toast.pages !== null">
+      <button class="thumb" type="button" :title="`Show in ${fileManagerName}`" @click="reveal">
+        <canvas ref="thumb" />
+      </button>
+      <div class="body">
+        <strong>Saved {{ pageCount(toast.pages) }}</strong>
+        <span class="detail" :title="toast.path ?? ''">{{ toast.note ? `${toast.note}. ` : "" }}{{ toast.fileName }}</span>
+      </div>
+      <div class="actions">
+        <button class="primary" type="button" :title="`Show in ${fileManagerName}`" @click="reveal"><Icon name="folder" /></button>
+      </div>
+    </template>
     <template v-else>
       <button class="thumb" type="button" title="Edit this capture" @click="edit">
         <canvas ref="thumb" />
@@ -99,7 +131,7 @@ onBeforeUnmount(() => {
         <button type="button" :title="`Show in ${fileManagerName}`" @click="reveal"><Icon name="folder" /></button>
       </div>
     </template>
-    <button class="ghost close" type="button" aria-label="Dismiss" @click="dismiss"><Icon name="close" /></button>
+    <button v-if="!toast.running" class="ghost close" type="button" aria-label="Dismiss" @click="dismiss"><Icon name="close" /></button>
   </div>
 </template>
 

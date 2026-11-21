@@ -41,10 +41,12 @@ function sampleImage() {
   return URL.createObjectURL(new Blob([raw]));
 }
 
-function sampleToast(error: boolean) {
-  if (error) {
+/** #toast, #toast-error, #toast-scrolling (in progress) or #toast-scrolled (done). */
+function sampleToast(kind: string) {
+  const none = { pages: null, running: false, note: null };
+  if (kind.includes("error")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail: null, copied: false,
-      error: "Could not write the image: Permission denied (os error 13)" };
+      error: "Could not write the image: Permission denied (os error 13)", ...none };
   }
   const width = 160, height = 100;
   const c = document.createElement("canvas");
@@ -58,12 +60,23 @@ function sampleToast(error: boolean) {
   g.fillRect(0, 0, width, height);
   g.fillStyle = "#f5f6f8";
   g.fillRect(20, 14, 120, 72);
+  const thumbnail = { width, height, data: Array.from(g.getImageData(0, 0, width, height).data) };
+  if (kind.includes("scrolling")) {
+    return { id: "t1", capture: null, path: null, fileName: null, thumbnail, copied: false, error: null,
+      pages: 12, running: true, note: null };
+  }
+  if (kind.includes("scrolled")) {
+    return { id: "t1", capture: null, path: "/Users/demo/Pictures/Screenshot-2026-11-20-18.04.29 Scrolling",
+      fileName: "Screenshot-2026-11-20-18.04.29 Scrolling", thumbnail, copied: false, error: null,
+      pages: 37, running: false, note: "Reached the end" };
+  }
   return {
+    ...none,
     id: "t1",
     capture: { id: "sample", width: 1600, height: 1000, name: "Screenshot-2026-11-20-18.04.29" },
     path: "/Users/demo/Pictures/Screenshot-2026-11-20-18.04.29.png",
     fileName: "Screenshot-2026-11-20-18.04.29.png",
-    thumbnail: { width, height, data: Array.from(g.getImageData(0, 0, width, height).data) },
+    thumbnail,
     copied: true,
     error: null,
   };
@@ -81,7 +94,7 @@ export function installMock() {
   ];
   const sample = sampleImage();
   let settings = {
-    hotkeys: { area: "Alt+Shift+4", window: "Alt+Shift+5", screen: "Alt+Shift+3", editor: "Alt+Shift+L" },
+    hotkeys: { area: "Alt+Shift+4", window: "Alt+Shift+5", scroll: "Alt+Shift+6", screen: "Alt+Shift+3", editor: "Alt+Shift+L" },
     saveDir: "",
     format: "png",
     filenameTemplate: "Screenshot-{date}-{time}",
@@ -89,6 +102,9 @@ export function installMock() {
     copyOnCapture: false,
     quickSave: false,
     quickSaveDir: "",
+    scrollDirection: "down",
+    scrollDelayMs: 500,
+    scrollMaxPages: 200,
     launchAtLogin: true,
     keepRunningInBackground: true,
     theme: "system",
@@ -138,7 +154,13 @@ export function installMock() {
         return mockShortcuts;
       case "permission_status":
       case "request_screen_permission":
-        return { screen: location.hash.includes("denied") ? "denied" : "granted", os: "macos", wayland: false };
+      case "request_input_permission":
+        return {
+          screen: location.hash.includes("denied") ? "denied" : "granted",
+          os: "macos",
+          wayland: false,
+          input: location.hash.includes("denied") ? "denied" : "granted",
+        };
       case "save_image":
         return "/Users/demo/Pictures/Screenshot.png";
       case "drag_image":
@@ -153,7 +175,7 @@ export function installMock() {
       case "take_pending_route":
         return null;
       case "toast_pending":
-        return toastWindow ? sampleToast(location.hash.includes("error")) : null;
+        return toastWindow ? sampleToast(location.hash) : null;
       case "plugin:app|version":
         return "0.1.0";
       default:

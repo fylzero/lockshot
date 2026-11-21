@@ -4,6 +4,7 @@ import type { HotkeyAction, Hotkeys, OsName, SystemShortcut } from "./types";
 export const HOTKEY_ACTIONS: { id: HotkeyAction; label: string; hint: string }[] = [
   { id: "area", label: "Capture area", hint: "Drag to select part of a screen. Click without dragging for the whole screen." },
   { id: "window", label: "Capture window", hint: "Click a window to capture just that window, even if others overlap it." },
+  { id: "scroll", label: "Scrolling capture", hint: "Click inside a window: Lockshot scrolls it and saves a page at a time into a new folder. Press again or Esc to stop." },
   { id: "screen", label: "Capture screen", hint: "The whole screen under the pointer, straight to the editor." },
   { id: "editor", label: "Open Lockshot", hint: "Bring the editor back, with your last capture." },
 ];
@@ -89,18 +90,18 @@ export function systemPreset(os: OsName): { label: string; hotkeys: Partial<Reco
   if (os === "macos") {
     return {
       label: "Use ⌘",
-      hotkeys: { area: "Cmd+Shift+4", window: "Cmd+Shift+5", screen: "Cmd+Shift+3", editor: "Cmd+Shift+L" },
+      hotkeys: { area: "Cmd+Shift+4", window: "Cmd+Shift+5", scroll: "Cmd+Shift+6", screen: "Cmd+Shift+3", editor: "Cmd+Shift+L" },
     };
   }
   if (os === "windows") {
     return {
       label: "Use Print Screen",
-      hotkeys: { area: "PrintScreen", window: "Alt+PrintScreen", screen: "Ctrl+PrintScreen" },
+      hotkeys: { area: "PrintScreen", window: "Alt+PrintScreen", scroll: "Shift+PrintScreen", screen: "Ctrl+PrintScreen" },
     };
   }
   return {
     label: "Use Print Screen",
-    hotkeys: { area: "PrintScreen", window: "Alt+PrintScreen", screen: "Shift+PrintScreen" },
+    hotkeys: { area: "PrintScreen", window: "Alt+PrintScreen", scroll: "Ctrl+PrintScreen", screen: "Shift+PrintScreen" },
   };
 }
 
@@ -110,7 +111,7 @@ export function systemPreset(os: OsName): { label: string; hotkeys: Partial<Reco
  */
 export function pcKeyboardPreset(os: OsName): { label: string; hotkeys: Partial<Record<HotkeyAction, string>> } | null {
   if (os !== "macos") return null;
-  return { label: "Use Print Screen", hotkeys: { area: "F13", window: "Alt+F13", screen: "Shift+F13" } };
+  return { label: "Use Print Screen", hotkeys: { area: "F13", window: "Alt+F13", scroll: "Ctrl+F13", screen: "Shift+F13" } };
 }
 
 const MODIFIER_ALIASES: Record<string, string> = {

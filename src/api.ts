@@ -25,6 +25,9 @@ export const api = {
   finishArea: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
     invoke<void>("finish_area", { session, rect }),
   finishWindow: (session: string, windowId: number) => invoke<void>("finish_window", { session, windowId }),
+  finishScroll: (session: string, windowId: number, x: number, y: number) =>
+    invoke<void>("finish_scroll", { session, windowId, x, y }),
+  scrollStop: () => invoke<void>("scroll_stop"),
   overlayPending: () => invoke<OverlayStart | null>("overlay_pending"),
   cancelArea: () => invoke<void>("cancel_area"),
   latestCapture: () => invoke<CaptureReady | null>("latest_capture"),
@@ -37,7 +40,8 @@ export const api = {
   exportSettingsJson: (path: string) => invoke<void>("export_settings_json", { path }),
   permissionStatus: () => invoke<PermissionStatus>("permission_status"),
   requestScreenPermission: () => invoke<PermissionStatus>("request_screen_permission"),
-  openSystemSettings: (target: "screen-recording" | "keyboard-shortcuts") =>
+  requestInputPermission: () => invoke<PermissionStatus>("request_input_permission"),
+  openSystemSettings: (target: "screen-recording" | "accessibility" | "keyboard-shortcuts") =>
     invoke<void>("open_system_settings", { target }),
   systemScreenshotShortcuts: () => invoke<SystemShortcut[]>("system_screenshot_shortcuts"),
   reregisterHotkeys: () => invoke<string[]>("reregister_hotkeys"),

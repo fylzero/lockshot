@@ -22,6 +22,7 @@ pub const OVERLAY_PREFIX: &str = "overlay-";
 
 struct MonitorShot {
     image: Arc<RgbaImage>,
+    bounds: Bounds,
     /// Capture Window: the windows on this display, front to back.
     windows: Vec<WindowTarget>,
 }
@@ -74,6 +75,8 @@ pub enum OverlayMode {
     Area,
     /// Click the window to capture.
     Window,
+    /// Click the part of a window to scroll and capture page by page.
+    Scroll,
 }
 
 /// A window an overlay can highlight, in fractions of its display.
@@ -108,6 +111,7 @@ pub struct Rect {
     pub height: f64,
 }
 
+#[derive(Clone, Copy)]
 struct Bounds {
     x: i32,
     y: i32,
@@ -346,12 +350,37 @@ pub fn start_window(app: &AppHandle) -> Result<(), String> {
     start_overlays(app, OverlayMode::Window)
 }
 
+/**
+ * Scrolling Capture: let the user click the part of a window to scroll. It
+ * needs to move the pointer and scroll, which macOS gates behind
+ * Accessibility and Wayland does not allow. The hotkey pressed again while
+ * one is running stops it.
+ */
+pub fn start_scroll(app: &AppHandle) -> Result<(), String> {
+    if crate::scrolling::is_running() {
+        crate::scrolling::stop();
+        return Ok(());
+    }
+    match platform::input_permission() {
+        "unsupported" => {
+            return Err("Scrolling Capture needs an X11 session: Wayland does not let apps scroll other apps' windows.".into())
+        }
+        "denied" => {
+            platform::request_input_permission();
+            crate::show_main(app, Some("/settings/permissions"));
+            return Err("Lockshot needs Accessibility permission to scroll other apps' windows.".into());
+        }
+        _ => {}
+    }
+    start_overlays(app, OverlayMode::Scroll)
+}
+
 fn start_overlays(app: &AppHandle, mode: OverlayMode) -> Result<(), String> {
     let start = Instant::now();
     ensure_permission(app)?;
     cancel_area(app);
 
-    let windows = if mode == OverlayMode::Window {
+    let windows = if mode != OverlayMode::Area {
         window_list::all()
     } else {
         Vec::new()
@@ -368,6 +397,7 @@ fn start_overlays(app: &AppHandle, mode: OverlayMode) -> Result<(), String> {
         let under_pointer = point.is_some_and(|p| contains(&bounds, p));
         shots.push(MonitorShot {
             image: Arc::new(image),
+            bounds,
             windows: windows_on(&bounds, &windows),
         });
         placements.push((bounds, under_pointer));
@@ -512,6 +542,40 @@ pub fn finish_window(
     };
     deliver(app, image, None);
     Ok(())
+}
+
+/**
+ * Scrolling Capture: the user clicked a spot inside a window. `x` and `y`
+ * are fractions of the display the overlay covered.
+ */
+pub fn finish_scroll(
+    app: &AppHandle,
+    label: &str,
+    session_id: &str,
+    window_id: u32,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    let shot = take_shot(app, label, session_id)?;
+    close_overlays(app);
+    let target = shot
+        .windows
+        .iter()
+        .find(|w| w.id == window_id)
+        .ok_or("That window is no longer available.")?;
+    let b = shot.bounds;
+    let (bw, bh) = (b.width as f64, b.height as f64);
+    crate::scrolling::start(
+        app,
+        crate::scrolling::Target {
+            window_id,
+            point: (
+                (b.x as f64 + x.clamp(0.0, 1.0) * bw).round() as i32,
+                (b.y as f64 + y.clamp(0.0, 1.0) * bh).round() as i32,
+            ),
+            window_height: target.height * bh,
+        },
+    )
 }
 
 /// Forget a capture whose editor tab was closed.

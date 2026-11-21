@@ -99,6 +99,26 @@ fn register(app: &AppHandle, action: &str, accelerator: &str) -> Result<(), Stri
     Ok(())
 }
 
+/// Claim a key for a short while, outside the user's hotkeys: Esc to stop a
+/// Scrolling Capture. It must not be one of theirs.
+pub fn register_extra(app: &AppHandle, action: &str, accelerator: &str) -> Result<(), String> {
+    let id = parse(accelerator)?.id();
+    if app
+        .state::<HotkeyState>()
+        .bound
+        .lock()
+        .unwrap()
+        .contains_key(&id)
+    {
+        return Err(format!("{accelerator} is already a Lockshot hotkey."));
+    }
+    register(app, action, accelerator)
+}
+
+pub fn unregister_extra(app: &AppHandle, accelerator: &str) {
+    unregister(app, accelerator);
+}
+
 fn unregister(app: &AppHandle, accelerator: &str) {
     if let Ok(shortcut) = parse(accelerator) {
         let _ = app.global_shortcut().unregister(shortcut);

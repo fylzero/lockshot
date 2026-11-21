@@ -7,6 +7,7 @@ import Icon from "../components/Icon.vue";
 import HotkeyRecorder from "../components/HotkeyRecorder.vue";
 import JsonEditor from "../components/JsonEditor.vue";
 import PermissionCard from "../components/PermissionCard.vue";
+import InputPermissionCard from "../components/InputPermissionCard.vue";
 import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
 import { env, saveSettingsSoon, settings, showToast, systemShortcuts } from "../store";
@@ -16,6 +17,11 @@ import { HOTKEY_ACTIONS, formatAccelerator, pcKeyboardPreset, systemClashes, sys
 import { THEME_OPTIONS } from "../theme";
 import { fileManagerName, modKey } from "../platform";
 import type { HotkeyAction } from "../types";
+
+/* A custom value from the JSON editor shows up in the list too. */
+const scrollPageLimits = computed(() =>
+  [...new Set([50, 100, 200, 500, 1000, settings.value?.scrollMaxPages ?? 200])].sort((a, b) => a - b),
+);
 
 const SECTIONS = [
   { id: "general", label: "General", icon: "settings" },
@@ -322,6 +328,46 @@ const EDITOR_KEYS = [
         </div>
 
         <div class="card">
+          <div class="card-title">Scrolling capture</div>
+          <div class="row">
+            <div class="row-label">
+              Direction
+              <small>
+                Lockshot scrolls the window you click and saves a page at a time to a new folder in the folder for
+                saves without editing. Chat apps keep older messages above, so scroll up to save a thread's history.
+              </small>
+            </div>
+            <div class="row-control">
+              <select v-model="settings.scrollDirection" @change="saveSettingsSoon">
+                <option value="down">Down, to the end</option>
+                <option value="up">Up, to the top</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Wait after each scroll
+              <small>Time for the app to load and draw the next messages. Raise it if pages come out half drawn.</small>
+            </div>
+            <div class="row-control">
+              <input v-model.number="settings.scrollDelayMs" type="range" min="100" max="3000" step="100" @change="saveSettingsSoon" />
+              <span style="width: 4rem; text-align: right">{{ (settings.scrollDelayMs / 1000).toFixed(1) }} s</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Page limit
+              <small>Stops a feed that never ends from filling the disk.</small>
+            </div>
+            <div class="row-control">
+              <select v-model.number="settings.scrollMaxPages" @change="saveSettingsSoon">
+                <option v-for="n in scrollPageLimits" :key="n" :value="n">{{ n }} pages</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="row">
             <div class="row-label">
               Launch at login
@@ -430,7 +476,7 @@ const EDITOR_KEYS = [
           </div>
           <div class="row">
             <div class="row-label">
-              <small>Defaults: area {{ formatAccelerator("Alt+Shift+4", env.os) }}, window {{ formatAccelerator("Alt+Shift+5", env.os) }}, screen {{ formatAccelerator("Alt+Shift+3", env.os) }}, open {{ formatAccelerator("Alt+Shift+L", env.os) }}</small>
+              <small>Defaults: area {{ formatAccelerator("Alt+Shift+4", env.os) }}, window {{ formatAccelerator("Alt+Shift+5", env.os) }}, scrolling {{ formatAccelerator("Alt+Shift+6", env.os) }}, screen {{ formatAccelerator("Alt+Shift+3", env.os) }}, open {{ formatAccelerator("Alt+Shift+L", env.os) }}</small>
             </div>
             <div class="row-control">
               <button v-if="env.os === 'macos' && preset" @click="applyPreset(preset)">{{ preset.label }}</button>
@@ -510,6 +556,7 @@ const EDITOR_KEYS = [
         <h2>Permissions</h2>
         <p class="muted">What your OS needs to let Lockshot capture the screen.</p>
         <PermissionCard />
+        <InputPermissionCard />
       </template>
 
       <!-- JSON -->

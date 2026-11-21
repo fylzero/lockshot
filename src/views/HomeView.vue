@@ -199,6 +199,13 @@ async function usePreset(which = preset.value) {
               <template v-for="(k, i) in acceleratorKeys(settings.hotkeys.window, env.os)" :key="i"><span v-if="i" class="key-plus">+</span>{{ k }}</template>
             </span>
           </button>
+          <button class="capture-card" @click="capture('scroll')">
+            <Icon name="scroll" />
+            <strong>Scrolling capture</strong>
+            <span v-if="settings.hotkeys.scroll" class="capture-keys">
+              <template v-for="(k, i) in acceleratorKeys(settings.hotkeys.scroll, env.os)" :key="i"><span v-if="i" class="key-plus">+</span>{{ k }}</template>
+            </span>
+          </button>
           <button class="capture-card" @click="capture('screen')">
             <Icon name="screen" />
             <strong>Capture screen</strong>
