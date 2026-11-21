@@ -111,6 +111,8 @@ export interface SaveToast {
   pointerLocked: boolean;
   /** Scrolling Capture has stopped and is writing the long image and text. */
   saving: boolean;
+  /** What it is doing while saving, such as "Stitching the long image…". */
+  stage: string | null;
   /** Why a Scrolling Capture ended. */
   note: string | null;
   /** What a finished Scrolling Capture saved, such as "Saved 12 pages and a long image". */

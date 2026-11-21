@@ -138,8 +138,16 @@ impl Stitcher {
     }
 
     /// Add what is left of the last page and write the image. Returns the
-    /// files written, and the text when it was read.
-    pub fn finish(mut self, last: &RgbaImage) -> Result<(Vec<PathBuf>, Option<String>), String> {
+    /// files written, and the text when it was read. `stage` hears what it
+    /// is doing, such as "Stitching the long image…", for the Saving notice.
+    pub fn finish(
+        mut self,
+        last: &RgbaImage,
+        stage: &mut dyn FnMut(String),
+    ) -> Result<(Vec<PathBuf>, Option<String>), String> {
+        if self.image {
+            stage("Stitching the long image…".into());
+        }
         let height = last.height() as usize;
         match self.edge {
             None => self.push(last, 0, height)?,
@@ -147,7 +155,19 @@ impl Stitcher {
             Some(_) => {}
         }
         self.flush()?;
-        let text = self.text.take().map(|reader| ocr::text(&reader.finish()));
+        let text = self.text.take().map(|reader| {
+            let blocks = reader.finish(|read, total| {
+                stage(if total > 1 {
+                    format!(
+                        "Reading the text (OCR), part {} of {total}…",
+                        (read + 1).min(total)
+                    )
+                } else {
+                    "Reading the text (OCR)…".into()
+                })
+            });
+            ocr::text(&blocks)
+        });
         /* Parts were written in scroll order: when scrolling up, the last
         one is the top of the content. */
         if self.up {
@@ -319,7 +339,7 @@ mod tests {
         };
         s.add(&pages[0], &pages[1], pane(5)).unwrap();
         s.add(&pages[1], &pages[2], pane(6)).unwrap();
-        let (files, _) = s.finish(&pages[2]).unwrap();
+        let (files, _) = s.finish(&pages[2], &mut |_| {}).unwrap();
         assert_eq!(files.len(), 1);
         let mut expected = vec![-1];
         expected.extend(1..=19);
@@ -343,7 +363,7 @@ mod tests {
         };
         s.add(&pages[0], &pages[1], pane(5)).unwrap();
         s.add(&pages[1], &pages[2], pane(6)).unwrap();
-        let (files, _) = s.finish(&pages[2]).unwrap();
+        let (files, _) = s.finish(&pages[2], &mut |_| {}).unwrap();
         let mut expected = vec![-1];
         expected.extend(10..=28);
         expected.push(-2);
@@ -356,7 +376,7 @@ mod tests {
         let out = dir("one");
         let s = Stitcher::new(out.clone(), "gif", 90, false, true, None);
         let page = window(0, 10);
-        let (files, _) = s.finish(&page).unwrap();
+        let (files, _) = s.finish(&page, &mut |_| {}).unwrap();
         assert_eq!(files[0].file_name().unwrap(), "Long image.png");
         assert_eq!(rows_of(&files[0]).len(), 10);
         std::fs::remove_dir_all(out).unwrap();

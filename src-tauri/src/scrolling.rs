@@ -448,7 +448,7 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     platform::unlock_pointer();
     frame::hide(app);
     quick_save::set_avoid(app, None);
-    quick_save::show_scroll_saving(app, writer.pages, &last, &note);
+    quick_save::show_scroll_saving(app, writer.pages, &last, &note, "Saving…");
 
     let mut saved = Vec::new();
     if keep_pages {
@@ -458,7 +458,10 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             format!("{} pages", writer.pages)
         });
     }
-    let (files, text) = stitcher.finish(&last)?;
+    let pages = writer.pages;
+    let (files, text) = stitcher.finish(&last, &mut |stage| {
+        quick_save::show_scroll_saving(app, pages, &last, &note, &stage)
+    })?;
     match files.len() {
         0 => {}
         1 => saved.push("a long image".to_string()),
@@ -1026,7 +1029,7 @@ mod pipeline_tests {
             };
             stitcher.add(last, next, Some(pane)).unwrap();
         }
-        let (files, text) = stitcher.finish(pages.last().unwrap()).unwrap();
+        let (files, text) = stitcher.finish(pages.last().unwrap(), &mut |_| {}).unwrap();
         let image = image::open(&files[0]).unwrap().to_rgba8();
         std::fs::remove_dir_all(dir).unwrap();
         (image, text.unwrap_or_default())

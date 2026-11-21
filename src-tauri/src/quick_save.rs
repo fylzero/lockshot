@@ -58,6 +58,8 @@ pub struct Toast {
     pointer_locked: bool,
     /// Scrolling Capture has stopped and is writing the long image and text.
     saving: bool,
+    /// What it is doing while saving, such as "Stitching the long image…".
+    stage: Option<String>,
     /// Why a Scrolling Capture ended, such as "Reached the end".
     note: Option<String>,
     /// What a finished Scrolling Capture saved, such as "Saved 12 pages
@@ -74,6 +76,9 @@ pub struct ToastState {
     avoid: Mutex<Option<(f64, f64, f64, f64)>>,
     /// No corner was clear of that part, so the toast sits on top of it.
     covering: AtomicBool,
+    /// Where place() last put the toast, so a Scrolling Capture's Saving
+    /// and finished notices stay where its progress notice was.
+    spot: Mutex<Option<(i32, i32)>>,
 }
 
 /// Scrolling Capture: keep the toast out of this part of the display, or
@@ -343,13 +348,26 @@ fn place(app: &AppHandle, window: &WebviewWindow) {
     let (x, y) = spot
         .or_else(|| corners.into_iter().find(free_of_pointer))
         .unwrap_or(corners[0]);
-    let _ = window.set_position(tauri::PhysicalPosition::new(
-        x.round() as i32,
-        y.round() as i32,
-    ));
+    let spot = (x.round() as i32, y.round() as i32);
+    *state.spot.lock().unwrap() = Some(spot);
+    let _ = window.set_position(tauri::PhysicalPosition::new(spot.0, spot.1));
+}
+
+/// Where the toast goes when it is shown.
+#[derive(Clone, Copy, PartialEq)]
+enum Placement {
+    /// A corner clear of the pointer and of the area being captured.
+    Corner,
+    /// Where the last toast was put. Picking a corner again once the
+    /// mouse is free can land somewhere else, and the notice would jump.
+    Same,
 }
 
 fn show(app: &AppHandle, toast: Toast) {
+    show_at(app, toast, Placement::Corner);
+}
+
+fn show_at(app: &AppHandle, toast: Toast, placement: Placement) {
     let previous = app
         .state::<ToastState>()
         .current
@@ -367,7 +385,14 @@ fn show(app: &AppHandle, toast: Toast) {
             return;
         }
     };
-    place(app, &window);
+    let spot = *app.state::<ToastState>().spot.lock().unwrap();
+    match spot.filter(|_| placement == Placement::Same) {
+        /* Also brings it back if it was moved off-screen for a capture. */
+        Some((x, y)) => {
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+        }
+        None => place(app, &window),
+    }
     let _ = window.emit_to(TOAST_LABEL, "toast-show", &toast);
     let _ = window.show();
 }
@@ -387,9 +412,16 @@ pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage, poi
     );
 }
 
-/// Scrolling Capture stopped and is writing the long image and text.
-pub fn show_scroll_saving(app: &AppHandle, pages: u32, latest: &RgbaImage, note: &str) {
-    show(
+/// Scrolling Capture stopped and is writing the long image and text;
+/// `stage` says which.
+pub fn show_scroll_saving(
+    app: &AppHandle,
+    pages: u32,
+    latest: &RgbaImage,
+    note: &str,
+    stage: &str,
+) {
+    show_at(
         app,
         Toast {
             id: uuid::Uuid::new_v4().to_string(),
@@ -397,9 +429,11 @@ pub fn show_scroll_saving(app: &AppHandle, pages: u32, latest: &RgbaImage, note:
             pages: Some(pages),
             running: true,
             saving: true,
+            stage: Some(stage.to_string()),
             note: Some(note.to_string()),
             ..Default::default()
         },
+        Placement::Same,
     );
 }
 
@@ -415,7 +449,7 @@ pub fn show_scroll_done(
     let file_name = std::path::Path::new(&dir)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned());
-    show(
+    show_at(
         app,
         Toast {
             id: uuid::Uuid::new_v4().to_string(),
@@ -427,6 +461,7 @@ pub fn show_scroll_done(
             title: Some(title),
             ..Default::default()
         },
+        Placement::Same,
     );
 }
 

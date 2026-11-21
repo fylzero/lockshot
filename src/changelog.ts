@@ -7,6 +7,14 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.3",
+    date: "November 21, 2026",
+    notes: [
+      "When Scrolling Capture finishes, the Saving and Saved notices stay where the progress notice was, instead of jumping to another corner of the screen.",
+      "The Saving notice says what Scrolling Capture is doing: stitching the long image, then reading the text (OCR), with how many parts are read so far on a long capture.",
+    ],
+  },
+  {
     version: "1.3.2",
     date: "November 21, 2026",
     notes: [

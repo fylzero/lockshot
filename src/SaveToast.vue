@@ -100,7 +100,7 @@ onBeforeUnmount(() => {
       <div class="thumb"><canvas ref="thumb" /></div>
       <div class="body">
         <strong>{{ toast.note ?? "Stopped" }} · {{ pageCount(toast.pages) }}</strong>
-        <span class="detail"><span class="saving-dot" />Saving…</span>
+        <span class="detail"><span class="saving-dot" />{{ toast.stage ?? "Saving…" }}</span>
       </div>
     </template>
     <template v-else-if="toast.running">

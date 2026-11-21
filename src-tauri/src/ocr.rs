@@ -9,8 +9,11 @@
 //! middle, so a line on a chunk boundary is read whole, once.
 
 use std::ops::Range;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::Arc;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use image::{imageops, RgbaImage};
 
@@ -78,19 +81,28 @@ pub struct Reader {
     columns: Option<Range<u32>>,
     jobs: Option<SyncSender<Job>>,
     worker: Option<JoinHandle<Vec<Vec<String>>>>,
+    /// Chunks sent to the worker, and chunks it has read, to show progress.
+    sent: AtomicUsize,
+    read: Arc<AtomicUsize>,
 }
 
 impl Reader {
     pub fn start(up: bool) -> Self {
         let (tx, rx) = sync_channel::<Job>(QUEUE);
+        let read = Arc::new(AtomicUsize::new(0));
+        let counter = read.clone();
         let worker = std::thread::spawn(move || {
             rx.into_iter()
-                .map(|job| match imp::recognize(&job.image) {
-                    Ok(found) => lines(found, &job.keep),
-                    Err(err) => {
-                        eprintln!("Could not read text: {err}");
-                        Vec::new()
-                    }
+                .map(|job| {
+                    let block = match imp::recognize(&job.image) {
+                        Ok(found) => lines(found, &job.keep),
+                        Err(err) => {
+                            eprintln!("Could not read text: {err}");
+                            Vec::new()
+                        }
+                    };
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    block
                 })
                 .collect()
         });
@@ -101,6 +113,8 @@ impl Reader {
             columns: None,
             jobs: Some(tx),
             worker: Some(worker),
+            sent: AtomicUsize::new(0),
+            read,
         }
     }
 
@@ -147,7 +161,9 @@ impl Reader {
     }
 
     /// Read what is left. One block of lines per chunk, in reading order.
-    pub fn finish(mut self) -> Vec<Vec<String>> {
+    /// `progress` hears how many chunks are read out of how many, whenever
+    /// that changes, while it waits.
+    pub fn finish(mut self, mut progress: impl FnMut(usize, usize)) -> Vec<Vec<String>> {
         if let Some(buffer) = self.buffer.take() {
             let start = if self.started {
                 MARGIN.min(buffer.height())
@@ -157,6 +173,16 @@ impl Reader {
             self.send(&buffer, 0..buffer.height(), start..buffer.height());
         }
         self.jobs.take();
+        let total = self.sent.load(Ordering::SeqCst);
+        let mut shown = None;
+        while self.worker.as_ref().is_some_and(|w| !w.is_finished()) {
+            let read = self.read.load(Ordering::SeqCst);
+            if shown != Some(read) {
+                progress(read, total);
+                shown = Some(read);
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
         let mut blocks = self
             .worker
             .take()
@@ -191,7 +217,9 @@ impl Reader {
             let height = image.height();
             keep = (height - keep.end)..(height - keep.start);
         }
-        let _ = jobs.send(Job { image, keep });
+        if jobs.send(Job { image, keep }).is_ok() {
+            self.sent.fetch_add(1, Ordering::SeqCst);
+        }
     }
 }
 
@@ -377,6 +405,6 @@ mod vision_tests {
         let image = image::open(path).unwrap().to_rgba8();
         let mut reader = super::Reader::start(false);
         reader.push(&image);
-        eprintln!("{}", super::text(&reader.finish()));
+        eprintln!("{}", super::text(&reader.finish(|_, _| {})));
     }
 }
