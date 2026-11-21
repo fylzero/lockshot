@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.1",
+    date: "November 21, 2026",
+    notes: [
+      "Clearer setup steps for Screen Recording and Accessibility on macOS. Allow access opens System Settings right on the list you need, so the steps now just say to turn on the switch next to Lockshot instead of pointing you through Privacy & Security menus.",
+    ],
+  },
+  {
     version: "1.3.0",
     date: "November 21, 2026",
     notes: [
