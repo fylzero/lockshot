@@ -19,20 +19,41 @@ const props = defineProps<{
 
 const info = computed(() => FORMAT_INFO[props.format]);
 
-const DRAG_THRESHOLD = 4;
-let press: { x: number; y: number; png: Promise<Uint8Array> } | null = null;
+const DRAG_THRESHOLD = 3;
+/**
+ * The press under way. The drag is armed the moment the icon is pressed, and
+ * the image rendered and written meanwhile: waiting for the file before the
+ * drag could begin lost quick flicks, which ended before it existed.
+ */
+type Press = { x: number; y: number; moved: boolean; ready: boolean };
+let press: Press | null = null;
+let presses = 0;
 const dragging = ref(false);
 
-function onBadgeDown(event: PointerEvent) {
-  if (event.button !== 0 || !props.ready || dragging.value) return;
+async function onBadgeDown(event: PointerEvent) {
+  if (event.button !== 0 || !props.ready || press || dragging.value) return;
   event.preventDefault();
-  /* Start rendering now so the drag can begin the moment the mouse moves. */
-  const png = props.render();
-  png.catch(() => {});
-  press = { x: event.clientX, y: event.clientY, png };
+  const current: Press = { x: event.clientX, y: event.clientY, moved: false, ready: false };
+  press = current;
   window.addEventListener("pointermove", onBadgeMove);
   window.addEventListener("pointerup", endPress);
   window.addEventListener("blur", endPress);
+  const options = { id: `${Date.now()}-${++presses}`, format: props.format, name: props.capture.name };
+  const armed = api.armDrag(options);
+  props
+    .render()
+    .then((png) => api.dragFile(png, options))
+    .catch((err) => showToast(errorMessage(err), "error"));
+  try {
+    const status = await armed;
+    if (status !== "ready") return endPress();
+    /* Windows and Linux: start once the mouse moves, or now if it already has. */
+    current.ready = true;
+    if (current.moved && press === current) void startDrag();
+  } catch (err) {
+    endPress();
+    showToast(errorMessage(err), "error");
+  }
 }
 
 function endPress() {
@@ -42,16 +63,19 @@ function endPress() {
   window.removeEventListener("blur", endPress);
 }
 
-async function onBadgeMove(event: PointerEvent) {
+function onBadgeMove(event: PointerEvent) {
   if (!press) return;
   if (!(event.buttons & 1)) return endPress();
   if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD) return;
-  const { png } = press;
+  press.moved = true;
+  if (press.ready) void startDrag();
+}
+
+async function startDrag() {
   endPress();
   dragging.value = true;
   try {
-    const bytes = await png;
-    await api.dragImage(bytes, { format: props.format, name: props.capture.name });
+    await api.startDrag();
   } catch (err) {
     showToast(errorMessage(err), "error");
   } finally {

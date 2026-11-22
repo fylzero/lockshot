@@ -1,6 +1,6 @@
 [package]
 name = "lockshot"
-version = "1.3.3"
+version = "1.3.4"
 description = "Screenshot capture and annotation for macOS, Windows, and Linux"
 authors = ["RazorKode LLC"]
 license = "MIT"
@@ -36,10 +36,13 @@ enigo = { version = "0.6", features = ["platform_specific"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+# Dragging the editor's file icon out as a file.
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSFilePromiseProvider", "NSGraphics", "NSImage", "NSPasteboard", "NSResponder", "NSView", "NSWindow"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFCGTypes", "CFDictionary", "CFNumber", "CFString"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGGeometry", "CGWindow"] }
 # Text from Scrolling Capture pages, read with Apple Vision.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSDictionary", "NSString", "NSError", "NSValue"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSGeometry", "NSOperation", "NSURL", "NSDictionary", "NSString", "NSError", "NSValue"] }
 objc2-vision = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "VNRequest", "VNRequestHandler", "VNRecognizeTextRequest", "VNObservation", "VNTypes", "VNUtils"] }
 plist = "1"
 

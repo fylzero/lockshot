@@ -8,6 +8,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::autostart;
 use crate::capture::{self, CaptureReady, OverlayStart, Rect};
+use crate::drag_out;
 use crate::export;
 use crate::hotkeys;
 use crate::platform::{self, PermissionStatus};
@@ -242,6 +243,8 @@ struct SaveOptions {
     /// extension, made unique if taken.
     dir: Option<String>,
     name: Option<String>,
+    /// For a drag-out: which press of the file icon this image is for.
+    id: Option<String>,
 }
 
 /**
@@ -294,47 +297,39 @@ pub fn save_image(
 
 /**
  * Drag the edited image out of the window as a real file, the way Skitch's
- * drag handle works: the file is written to a private temporary folder under
- * the export name and format, then handed to the OS as a native drag, so it
- * can be dropped on the Desktop, a Finder or Explorer window, a browser
- * upload field, a chat, and so on. Same raw body as `save_image`.
+ * drag handle works, to drop it on the Desktop, a Finder or Explorer window,
+ * a browser upload field, a chat, and so on. Call it the moment the file
+ * icon is pressed, and `drag_file` with the image alongside: the drag gets
+ * going while the file is written.
  */
 #[tauri::command]
-pub async fn drag_image(
+pub async fn arm_drag(
     window: WebviewWindow,
-    state: State<'_, AppState>,
-    request: Request<'_>,
-) -> Result<(), String> {
+    id: String,
+    name: String,
+    format: String,
+) -> Result<drag_out::DragStatus, String> {
+    let file = drag_out::file_for(&id, &export::sanitize_file_stem(&name), &format);
+    drag_out::arm(window, file).await
+}
+
+/// Write the image for a press of the file icon. Same raw body as `save_image`.
+#[tauri::command]
+pub async fn drag_file(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
     let (options, png) = split_save_body(&request)?;
     let quality = state.settings.lock().unwrap().jpeg_quality;
+    let id = options.id.ok_or("The drag is missing its id.")?;
     let stem = export::sanitize_file_stem(options.name.as_deref().unwrap_or("Screenshot"));
-    let path = export::write_drag_file(&png, &options.format, quality, &stem)?;
-    let preview = export::drag_preview(&png)?;
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    let target = window.clone();
-    window
-        .run_on_main_thread(move || {
-            let item = drag::DragItem::Files(vec![path]);
-            let icon = drag::Image::Raw(preview);
-            let start = || -> Result<(), String> {
-                #[cfg(target_os = "linux")]
-                let handle = target.gtk_window().map_err(|err| err.to_string())?;
-                #[cfg(target_os = "linux")]
-                let handle = &handle;
-                #[cfg(not(target_os = "linux"))]
-                let handle = &target;
-                drag::start_drag(handle, item, icon, |_, _| {}, drag::Options::default())
-                    .map_err(|err| err.to_string())
-            };
-            let _ = tx.send(start());
-        })
-        .map_err(|err| err.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || rx.recv())
+    let file = drag_out::file_for(&id, &stem, &options.format);
+    tauri::async_runtime::spawn_blocking(move || drag_out::write(&file, &png, &options.format, quality))
         .await
-        .map_err(|err| err.to_string())?
-        .map_err(|_| "The drag did not start.".to_string())?
-        .map_err(|err| format!("Could not start the drag: {err}"))
+        .map_err(|err| err.to_string())
+}
+
+/// Start dragging the press's file once the mouse moves (Windows, Linux).
+#[tauri::command]
+pub async fn start_drag(window: WebviewWindow) -> Result<(), String> {
+    drag_out::start(window).await
 }
 
 #[tauri::command]

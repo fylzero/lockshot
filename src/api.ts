@@ -59,15 +59,22 @@ export const api = {
     return invoke<string>("save_image", saveBody(png, options));
   },
   /**
-   * Start a native drag of the image as a file named `name.format`. Call it
-   * while the mouse button is still down.
+   * Get a native drag of the image as a file named `name.format` going. Call
+   * it the moment the file icon is pressed, and `dragFile` with the image
+   * under the same `id`. On macOS it starts the drag itself when the mouse
+   * moves and resolves to "started", or "released" for a plain click;
+   * elsewhere it resolves to "ready" and `startDrag` begins the drag.
    */
-  dragImage(png: Uint8Array, options: { format: ExportFormat; name: string }) {
-    return invoke<void>("drag_image", saveBody(png, options));
+  armDrag: (options: { id: string; format: ExportFormat; name: string }) =>
+    invoke<"started" | "released" | "ready">("arm_drag", options),
+  /** Write the image for the press `id` while its drag gets going. */
+  dragFile(png: Uint8Array, options: { id: string; format: ExportFormat; name: string }) {
+    return invoke<void>("drag_file", saveBody(png, options));
   },
+  startDrag: () => invoke<void>("start_drag"),
 };
 
-type SaveOptions = { format: ExportFormat; path?: string; dir?: string; name?: string };
+type SaveOptions = { format: ExportFormat; path?: string; dir?: string; name?: string; id?: string };
 
 /**
  * Hand the final PNG to Rust as raw bytes: a little-endian u32 length,

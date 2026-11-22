@@ -2764,14 +2764,16 @@ dependencies = [
 
 [[package]]
 name = "lockshot"
-version = "1.3.3"
+version = "1.3.4"
 dependencies = [
+ "block2",
  "chrono",
  "drag",
  "enigo",
  "flate2",
  "image",
  "objc2",
+ "objc2-app-kit",
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation",

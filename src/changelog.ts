@@ -7,6 +7,14 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.4",
+    date: "November 21, 2026",
+    notes: [
+      "Dragging the file icon in the preview's corner onto the Desktop or a Finder folder now drops the file there. Before, Finder took the drop but wrote nothing.",
+      "The file icon picks up a drag the moment you move, even with a quick flick, and every grab works. Before, a fast drag often ended before it began, and the grab after each drag did nothing.",
+    ],
+  },
+  {
     version: "1.3.3",
     date: "November 21, 2026",
     notes: [

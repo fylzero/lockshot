@@ -166,7 +166,11 @@ export function installMock() {
         };
       case "save_image":
         return "/Users/demo/Pictures/Screenshot.png";
-      case "drag_image":
+      case "arm_drag":
+        return "released";
+      case "drag_file":
+        return null;
+      case "start_drag":
         return null;
       case "plugin:dialog|open":
         return "/Users/demo/Pictures/Sample.png";

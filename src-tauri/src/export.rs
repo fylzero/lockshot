@@ -87,23 +87,21 @@ pub fn drag_dir() -> PathBuf {
 }
 
 /**
- * Write the image for a drag-out as `stem.ext` in a fresh folder, so the
- * dropped file keeps the exact export name. Earlier drags are cleared first;
- * a drop target has read or copied its file by the time the next drag begins.
+ * Where to write the image for a drag-out: `stem.ext` in a fresh folder, so
+ * the dropped file keeps the exact export name. Drags over a minute old are
+ * cleared out; a newer one may still be writing a file Finder waits on.
  */
-pub fn write_drag_file(
-    png: &[u8],
-    format: &str,
-    quality: u8,
-    stem: &str,
-) -> Result<PathBuf, String> {
+pub fn drag_path(stem: &str, format: &str) -> PathBuf {
     let root = drag_dir();
-    let _ = fs::remove_dir_all(&root);
-    let path = root
-        .join(uuid::Uuid::new_v4().simple().to_string())
-        .join(format!("{stem}.{}", extension(format)));
-    write(png, format, quality, &path)?;
-    Ok(path)
+    let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+    for entry in fs::read_dir(&root).into_iter().flatten().flatten() {
+        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < stale);
+        if old {
+            let _ = fs::remove_dir_all(entry.path());
+        }
+    }
+    root.join(uuid::Uuid::new_v4().simple().to_string())
+        .join(format!("{stem}.{}", extension(format)))
 }
 
 /// A small PNG thumbnail of the image to show under the cursor while dragging.
@@ -410,7 +408,8 @@ mod tests {
     #[test]
     fn drag_files_keep_the_export_name() {
         let png = sample_png();
-        let path = write_drag_file(&png, "jpg", 90, "My shot").unwrap();
+        let path = drag_path("My shot", "jpg");
+        write(&png, "jpg", 90, &path).unwrap();
         assert_eq!(path.file_name().unwrap(), "My shot.jpg");
         assert!(path.starts_with(drag_dir()));
         let preview = drag_preview(&png).unwrap();

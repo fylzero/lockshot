@@ -1,6 +1,7 @@
 mod autostart;
 mod capture;
 mod commands;
+mod drag_out;
 mod export;
 mod frame;
 mod hotkeys;
@@ -206,7 +207,9 @@ pub fn run() {
             commands::latest_capture,
             commands::release_capture,
             commands::save_image,
-            commands::drag_image,
+            commands::arm_drag,
+            commands::drag_file,
+            commands::start_drag,
             commands::reveal_path,
             commands::reveal_settings_file,
             commands::open_folder,
