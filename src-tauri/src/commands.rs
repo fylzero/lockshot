@@ -321,9 +321,11 @@ pub async fn drag_file(state: State<'_, AppState>, request: Request<'_>) -> Resu
     let id = options.id.ok_or("The drag is missing its id.")?;
     let stem = export::sanitize_file_stem(options.name.as_deref().unwrap_or("Screenshot"));
     let file = drag_out::file_for(&id, &stem, &options.format);
-    tauri::async_runtime::spawn_blocking(move || drag_out::write(&file, &png, &options.format, quality))
-        .await
-        .map_err(|err| err.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        drag_out::write(&file, &png, &options.format, quality)
+    })
+    .await
+    .map_err(|err| err.to_string())
 }
 
 /// Start dragging the press's file once the mouse moves (Windows, Linux).

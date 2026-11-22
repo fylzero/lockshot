@@ -27,8 +27,10 @@ use crate::export;
 #[serde(rename_all = "lowercase")]
 pub enum DragStatus {
     /// The drag began (macOS starts it on the first move past the threshold).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Started,
     /// The button came up before the mouse moved: it was only a click.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Released,
     /// Call `start` once the mouse moves (Windows, Linux).
     #[cfg_attr(target_os = "macos", allow(dead_code))]
@@ -102,7 +104,7 @@ pub fn file_for(id: &str, stem: &str, format: &str) -> Arc<DragFile> {
     let keep: Vec<_> = recent.iter().map(|f| f.path.clone()).collect();
     let path = export::drag_path(stem, format, &keep);
     /* macOS leaves a file out of a drag if nothing is at its path when the
-       drag begins, so hold the spot until the image is written over it. */
+    drag begins, so hold the spot until the image is written over it. */
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -122,9 +124,10 @@ pub fn file_for(id: &str, stem: &str, format: &str) -> Arc<DragFile> {
 
 /// Write the image for press `id` and its drag preview. Blocks.
 pub fn write(file: &DragFile, png: &[u8], format: &str, quality: u8) {
-    file.finish(export::write(png, format, quality, &file.path).and_then(|()| export::drag_preview(png)));
+    file.finish(
+        export::write(png, format, quality, &file.path).and_then(|()| export::drag_preview(png)),
+    );
 }
-
 
 /**
  * Get the drag of `file` going as soon as the icon is pressed. On macOS, wait
@@ -153,7 +156,11 @@ pub async fn arm(window: WebviewWindow, file: Arc<DragFile>) -> Result<DragStatu
 
 /// Start the drag of the current press's file once written (Windows, Linux).
 pub async fn start(window: WebviewWindow) -> Result<(), String> {
-    let file = ARMED.lock().unwrap().take().ok_or("There is no file to drag.")?;
+    let file = ARMED
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or("There is no file to drag.")?;
     let preview = tauri::async_runtime::spawn_blocking({
         let file = file.clone();
         move || file.wait(Duration::from_secs(30))
@@ -191,20 +198,22 @@ pub async fn start(window: WebviewWindow) -> Result<(), String> {
 mod mac {
     use super::{DragFile, DragStatus};
     use std::cell::{Cell, RefCell};
-    use std::sync::Arc;
-    use std::time::Duration;
     use std::ptr::NonNull;
     use std::rc::Rc;
     use std::sync::mpsc::Sender;
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use block2::{DynBlock, RcBlock};
     use objc2::rc::Retained;
     use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
-    use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, Message};
+    use objc2::{
+        define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, Message,
+    };
     use objc2_app_kit::{
         NSDragOperation, NSDraggingContext, NSDraggingItem, NSDraggingSession, NSDraggingSource,
-        NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFilePromiseProvider, NSFilePromiseProviderDelegate,
-        NSImage, NSPasteboard, NSPasteboardWriting, NSWindow,
+        NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFilePromiseProvider,
+        NSFilePromiseProviderDelegate, NSImage, NSPasteboard, NSPasteboardWriting, NSWindow,
     };
     use objc2_foundation::{NSArray, NSData, NSError, NSPoint, NSRect, NSString, NSURL};
     use tauri::WebviewWindow;
@@ -256,7 +265,11 @@ mod mac {
 
     impl FileIvars {
         fn name(&self) -> String {
-            self.file.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+            self.file
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
         }
     }
 
@@ -271,18 +284,29 @@ mod mac {
 
         unsafe impl NSFilePromiseProviderDelegate for PromiseDelegate {
             #[unsafe(method_id(filePromiseProvider:fileNameForType:))]
-            fn file_name(&self, _provider: &NSFilePromiseProvider, _type: &NSString) -> Retained<NSString> {
+            fn file_name(
+                &self,
+                _provider: &NSFilePromiseProvider,
+                _type: &NSString,
+            ) -> Retained<NSString> {
                 NSString::from_str(&self.ivars().name())
             }
 
             #[unsafe(method(filePromiseProvider:writePromiseToURL:completionHandler:))]
-            fn write(&self, _provider: &NSFilePromiseProvider, url: &NSURL, done: &DynBlock<dyn Fn(*mut NSError)>) {
+            fn write(
+                &self,
+                _provider: &NSFilePromiseProvider,
+                url: &NSURL,
+                done: &DynBlock<dyn Fn(*mut NSError)>,
+            ) {
                 /* Finder calls this off the main thread, so it can wait for the file. */
                 let file = &self.ivars().file;
                 let result = file
                     .wait(Duration::from_secs(30))
                     .and_then(|_| url.path().ok_or_else(|| "no path".to_string()))
-                    .and_then(|to| std::fs::copy(&file.path, to.to_string()).map_err(|e| e.to_string()));
+                    .and_then(|to| {
+                        std::fs::copy(&file.path, to.to_string()).map_err(|e| e.to_string())
+                    });
                 match result {
                     Ok(_) => done.call((std::ptr::null_mut(),)),
                     Err(_) => {
@@ -317,9 +341,9 @@ mod mac {
             fn property_list(&self, kind: &NSString) -> Option<Retained<AnyObject>> {
                 if kind.to_string() == FILE_URL {
                     /* AppKit asks for this as the drag begins and never again, so
-                       hand over the file without waiting for the image: it is written
-                       over the placeholder well before a drop, a few hundred
-                       milliseconds at most for a big capture. */
+                    hand over the file without waiting for the image: it is written
+                    over the placeholder well before a drop, a few hundred
+                    milliseconds at most for a big capture. */
                     file_url(&self.ivars().file.path)
                         .absoluteString()
                         .map(|url| Retained::into_super(Retained::into_super(url)))
@@ -352,7 +376,8 @@ mod mac {
     fn file_icon(path: &std::path::Path) -> Retained<NSImage> {
         let ext = NSString::from_str(path.extension().and_then(|e| e.to_str()).unwrap_or("png"));
         let image: Retained<NSImage> = unsafe {
-            let workspace: Retained<AnyObject> = msg_send![objc2::class!(NSWorkspace), sharedWorkspace];
+            let workspace: Retained<AnyObject> =
+                msg_send![objc2::class!(NSWorkspace), sharedWorkspace];
             msg_send![&workspace, iconForFileType: &*ext]
         };
         image.setSize(objc2_foundation::NSSize::new(64.0, 64.0));
@@ -361,7 +386,10 @@ mod mac {
 
     impl DragSource {
         fn new(window: &NSWindow, at: NSPoint, mtm: MainThreadMarker) -> Retained<Self> {
-            let this = Self::alloc(mtm).set_ivars(SourceIvars { window: window.retain(), at });
+            let this = Self::alloc(mtm).set_ivars(SourceIvars {
+                window: window.retain(),
+                at,
+            });
             unsafe { msg_send![super(this), init] }
         }
 
@@ -373,7 +401,8 @@ mod mac {
         fn release_page(&self) {
             let SourceIvars { window, at } = self.ivars();
             unsafe {
-                let app: Retained<AnyObject> = msg_send![objc2::class!(NSApplication), sharedApplication];
+                let app: Retained<AnyObject> =
+                    msg_send![objc2::class!(NSApplication), sharedApplication];
                 let current: Option<Retained<NSEvent>> = msg_send![&app, currentEvent];
                 let up: Option<Retained<NSEvent>> = msg_send![
                     objc2::class!(NSEvent),
@@ -482,7 +511,9 @@ mod mac {
         mtm: MainThreadMarker,
     ) -> Result<(), String> {
         let path = &file.path;
-        let view = window.contentView().ok_or("The editor window has no view.")?;
+        let view = window
+            .contentView()
+            .ok_or("The editor window has no view.")?;
 
         let delegate = PromiseDelegate::alloc().set_ivars(FileIvars { file: file.clone() });
         let delegate: Retained<PromiseDelegate> = unsafe { msg_send![super(delegate), init] };
@@ -505,7 +536,10 @@ mod mac {
             .unwrap_or_else(|| file_icon(path));
         let size = image.size();
         let at = view.convertPoint_fromView(event.locationInWindow(), None);
-        let frame = NSRect::new(NSPoint::new(at.x - size.width / 2.0, at.y - size.height / 2.0), size);
+        let frame = NSRect::new(
+            NSPoint::new(at.x - size.width / 2.0, at.y - size.height / 2.0),
+            size,
+        );
         unsafe { item.setDraggingFrame_contents(frame, Some(&image)) };
 
         let source = DragSource::new(window, event.locationInWindow(), mtm);

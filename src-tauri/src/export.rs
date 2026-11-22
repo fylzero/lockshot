@@ -96,8 +96,13 @@ pub fn drag_path(stem: &str, format: &str, keep: &[PathBuf]) -> PathBuf {
     let root = drag_dir();
     let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
     for entry in fs::read_dir(&root).into_iter().flatten().flatten() {
-        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < stale);
-        let kept = keep.iter().any(|k| k.parent() == Some(entry.path().as_path()));
+        let old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .is_ok_and(|t| t < stale);
+        let kept = keep
+            .iter()
+            .any(|k| k.parent() == Some(entry.path().as_path()));
         if old && !kept {
             let _ = fs::remove_dir_all(entry.path());
         }
