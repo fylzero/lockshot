@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { api, errorMessage } from "../api";
 import { showToast, type CaptureDoc } from "../store";
 import { FORMAT_INFO } from "../formats";
@@ -15,20 +15,65 @@ const props = defineProps<{
   render: () => Promise<Uint8Array>;
   ready: boolean;
   format: ExportFormat;
+  /** Bumped on every edit to the image. */
+  revision: number;
+  /** The editor is the visible tab. */
+  active: boolean;
+  /** A text box is being typed in; rendering would end that. */
+  busy: boolean;
 }>();
 
 const info = computed(() => FORMAT_INFO[props.format]);
 
 const DRAG_THRESHOLD = 3;
 /**
- * The press under way. The drag is armed the moment the icon is pressed, and
- * the image rendered and written meanwhile: waiting for the file before the
- * drag could begin lost quick flicks, which ended before it existed.
+ * The press under way. The drag is armed the moment the icon is pressed;
+ * waiting for the file before the drag could begin lost quick flicks.
  */
 type Press = { x: number; y: number; moved: boolean; ready: boolean };
 let press: Press | null = null;
-let presses = 0;
+let files = 0;
 const dragging = ref(false);
+
+/*
+ * The file is written ahead of time, once the image has sat unchanged for a
+ * moment or the pointer comes over the icon, so it is complete even when a
+ * quick flick drops it a fraction of a second after the grab. A big capture
+ * takes a second or two to write.
+ */
+let prepared: { key: string; id: string } | null = null;
+const preparedKey = () => `${props.revision}|${props.format}|${props.capture.name}`;
+
+function writeFile(): string {
+  const id = `${Date.now()}-${++files}`;
+  const options = { id, format: props.format, name: props.capture.name };
+  const entry = { key: preparedKey(), id };
+  prepared = entry;
+  props
+    .render()
+    .then((png) => api.dragFile(png, options))
+    .catch((err) => {
+      if (prepared === entry) prepared = null;
+      if (press) showToast(errorMessage(err), "error");
+    });
+  return id;
+}
+
+function prepare() {
+  if (!props.ready || !props.active || props.busy || prepared?.key === preparedKey()) return;
+  writeFile();
+}
+
+let idle: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => [props.revision, props.format, props.capture.name, props.ready, props.active, props.busy],
+  () => {
+    clearTimeout(idle);
+    idle = setTimeout(prepare, 800);
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => clearTimeout(idle));
 
 async function onBadgeDown(event: PointerEvent) {
   if (event.button !== 0 || !props.ready || press || dragging.value) return;
@@ -38,14 +83,10 @@ async function onBadgeDown(event: PointerEvent) {
   window.addEventListener("pointermove", onBadgeMove);
   window.addEventListener("pointerup", endPress);
   window.addEventListener("blur", endPress);
-  const options = { id: `${Date.now()}-${++presses}`, format: props.format, name: props.capture.name };
-  const armed = api.armDrag(options);
-  props
-    .render()
-    .then((png) => api.dragFile(png, options))
-    .catch((err) => showToast(errorMessage(err), "error"));
+  /* Use the file written ahead if it is still current, else write it now. */
+  const id = prepared?.key === preparedKey() ? prepared.id : writeFile();
   try {
-    const status = await armed;
+    const status = await api.armDrag({ id, format: props.format, name: props.capture.name });
     if (status !== "ready") return endPress();
     /* Windows and Linux: start once the mouse moves, or now if it already has. */
     current.ready = true;
@@ -97,6 +138,7 @@ const badgeTitle = computed(() =>
     :title="badgeTitle"
     role="button"
     :aria-label="`Drag out as ${capture.name}.${format}`"
+    @pointerenter="prepare"
     @pointerdown="onBadgeDown"
     @dragstart.prevent
   >

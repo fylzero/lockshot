@@ -82,25 +82,41 @@ impl DragFile {
     }
 }
 
-static CURRENT: Mutex<Option<Arc<DragFile>>> = Mutex::new(None);
+/// The last few presses' files, newest last; a late write for an older one
+/// must not take the place of the newest.
+static RECENT: Mutex<Vec<Arc<DragFile>>> = Mutex::new(Vec::new());
+/// The file of the press being dragged (Windows, Linux).
+static ARMED: Mutex<Option<Arc<DragFile>>> = Mutex::new(None);
+const KEEP: usize = 4;
 
 /**
- * The file for press `id`, named `stem` in `format`. The press's two calls,
- * arming and writing, may arrive in either order; whichever comes first makes
- * it, clearing out earlier presses' files.
+ * The file for press `id`, named `stem` in `format`. A press's two calls,
+ * arming and writing, may arrive in either order; whichever comes first
+ * makes it.
  */
 pub fn file_for(id: &str, stem: &str, format: &str) -> Arc<DragFile> {
-    let mut current = CURRENT.lock().unwrap();
-    if let Some(file) = current.as_ref().filter(|f| f.id == id) {
+    let mut recent = RECENT.lock().unwrap();
+    if let Some(file) = recent.iter().find(|f| f.id == id) {
         return file.clone();
     }
+    let keep: Vec<_> = recent.iter().map(|f| f.path.clone()).collect();
+    let path = export::drag_path(stem, format, &keep);
+    /* macOS leaves a file out of a drag if nothing is at its path when the
+       drag begins, so hold the spot until the image is written over it. */
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::File::create(&path);
     let file = Arc::new(DragFile {
         id: id.to_string(),
-        path: export::drag_path(stem, format),
+        path,
         state: Mutex::new(FileState::Writing),
         changed: Condvar::new(),
     });
-    *current = Some(file.clone());
+    recent.push(file.clone());
+    if recent.len() > KEEP {
+        recent.remove(0);
+    }
     file
 }
 
@@ -129,14 +145,15 @@ pub async fn arm(window: WebviewWindow, file: Arc<DragFile>) -> Result<DragStatu
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (window, file);
+        let _ = window;
+        *ARMED.lock().unwrap() = Some(file);
         Ok(DragStatus::Ready)
     }
 }
 
 /// Start the drag of the current press's file once written (Windows, Linux).
 pub async fn start(window: WebviewWindow) -> Result<(), String> {
-    let file = CURRENT.lock().unwrap().clone().ok_or("There is no file to drag.")?;
+    let file = ARMED.lock().unwrap().take().ok_or("There is no file to drag.")?;
     let preview = tauri::async_runtime::spawn_blocking({
         let file = file.clone();
         move || file.wait(Duration::from_secs(30))
@@ -183,11 +200,11 @@ mod mac {
     use block2::{DynBlock, RcBlock};
     use objc2::rc::Retained;
     use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
-    use objc2::{define_class, msg_send, AnyThread, ClassType, DefinedClass, MainThreadMarker, MainThreadOnly, Message};
+    use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, Message};
     use objc2_app_kit::{
         NSDragOperation, NSDraggingContext, NSDraggingItem, NSDraggingSession, NSDraggingSource,
         NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFilePromiseProvider, NSFilePromiseProviderDelegate,
-        NSImage, NSPasteboard, NSPasteboardWriting, NSPasteboardWritingOptions, NSWindow,
+        NSImage, NSPasteboard, NSPasteboardWriting, NSWindow,
     };
     use objc2_foundation::{NSArray, NSData, NSError, NSPoint, NSRect, NSString, NSURL};
     use tauri::WebviewWindow;
@@ -296,31 +313,16 @@ mod mac {
                 NSArray::from_retained_slice(&all)
             }
 
-            /* The plain file is handed over at the drop, not when the drag begins:
-               AppKit asks for eager types straight away, which would hold the
-               drag until the file is written. */
-            #[unsafe(method(writingOptionsForType:pasteboard:))]
-            fn writing_options(&self, kind: &NSString, pasteboard: &NSPasteboard) -> NSPasteboardWritingOptions {
-                if kind.to_string() == FILE_URL {
-                    return NSPasteboardWritingOptions::Promised;
-                }
-                let selector = objc2::sel!(writingOptionsForType:pasteboard:);
-                if NSFilePromiseProvider::class().responds_to(selector) {
-                    unsafe { msg_send![super(self), writingOptionsForType: kind, pasteboard: pasteboard] }
-                } else {
-                    NSPasteboardWritingOptions::empty()
-                }
-            }
-
             #[unsafe(method_id(pasteboardPropertyListForType:))]
             fn property_list(&self, kind: &NSString) -> Option<Retained<AnyObject>> {
                 if kind.to_string() == FILE_URL {
-                    /* Asked for at the drop, by which time the file is all but always written. */
-                    let file = &self.ivars().file;
-                    match file.wait(Duration::from_secs(5)) {
-                        Ok(_) => file_url(&file.path).pasteboardPropertyListForType(kind),
-                        Err(_) => None,
-                    }
+                    /* AppKit asks for this as the drag begins and never again, so
+                       hand over the file without waiting for the image: it is written
+                       over the placeholder well before a drop, a few hundred
+                       milliseconds at most for a big capture. */
+                    file_url(&self.ivars().file.path)
+                        .absoluteString()
+                        .map(|url| Retained::into_super(Retained::into_super(url)))
                 } else {
                     unsafe { msg_send![super(self), pasteboardPropertyListForType: kind] }
                 }

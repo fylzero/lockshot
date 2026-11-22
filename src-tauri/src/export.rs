@@ -89,14 +89,16 @@ pub fn drag_dir() -> PathBuf {
 /**
  * Where to write the image for a drag-out: `stem.ext` in a fresh folder, so
  * the dropped file keeps the exact export name. Drags over a minute old are
- * cleared out; a newer one may still be writing a file Finder waits on.
+ * cleared out, but for the folders holding `keep`; a newer one may still be
+ * writing a file Finder waits on.
  */
-pub fn drag_path(stem: &str, format: &str) -> PathBuf {
+pub fn drag_path(stem: &str, format: &str, keep: &[PathBuf]) -> PathBuf {
     let root = drag_dir();
     let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
     for entry in fs::read_dir(&root).into_iter().flatten().flatten() {
         let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < stale);
-        if old {
+        let kept = keep.iter().any(|k| k.parent() == Some(entry.path().as_path()));
+        if old && !kept {
             let _ = fs::remove_dir_all(entry.path());
         }
     }
@@ -408,7 +410,7 @@ mod tests {
     #[test]
     fn drag_files_keep_the_export_name() {
         let png = sample_png();
-        let path = drag_path("My shot", "jpg");
+        let path = drag_path("My shot", "jpg", &[]);
         write(&png, "jpg", 90, &path).unwrap();
         assert_eq!(path.file_name().unwrap(), "My shot.jpg");
         assert!(path.starts_with(drag_dir()));

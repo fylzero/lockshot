@@ -926,6 +926,9 @@ async function copy(quiet = false) {
 const exportBar = ref<InstanceType<typeof ExportBar> | null>(null);
 /** Picked in the toolbar's export controls; the file icon in the preview drags out in it. */
 const exportFormat = ref<ExportFormat>(settings.value?.format ?? "png");
+/** Bumped on every edit, so the file icon knows when to write its file again. */
+const revision = ref(0);
+watch([shapes, crop, image], () => revision.value++);
 
 /* ---- Keyboard ---- */
 
@@ -1315,7 +1318,16 @@ onBeforeUnmount(() => {
         <button title="Actual pixels" @click="setZoom(1)">1:1</button>
         <span class="zoom-size" title="Image size in pixels, after any crop">{{ outputSize.width }} × {{ outputSize.height }}</span>
       </div>
-      <FileBadge v-if="image" :capture="capture" :render="renderPng" :ready="!!image" :format="exportFormat" />
+      <FileBadge
+        v-if="image"
+        :capture="capture"
+        :render="renderPng"
+        :ready="!!image"
+        :format="exportFormat"
+        :revision="revision"
+        :active="active"
+        :busy="!!editing"
+      />
     </div>
 
   </div>
