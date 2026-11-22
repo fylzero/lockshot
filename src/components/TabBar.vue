@@ -120,6 +120,15 @@ function hint(label: string, accelerator?: string) {
       <button
         class="tab-tool"
         type="button"
+        :title="hint('Scrolling capture', settings?.hotkeys.scroll)"
+        aria-label="Scrolling capture"
+        @click="capture('scroll')"
+      >
+        <Icon name="scroll" />
+      </button>
+      <button
+        class="tab-tool"
+        type="button"
         :title="hint('Capture screen', settings?.hotkeys.screen)"
         aria-label="Capture screen"
         @click="capture('screen')"

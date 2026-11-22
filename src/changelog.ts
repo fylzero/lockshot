@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     notes: [
       "Dragging the file icon in the preview's corner onto the Desktop or a Finder folder now drops the file there. Before, Finder took the drop but wrote nothing. Dropping on a browser, a chat or another app works as before, even with a big capture dropped the instant it is grabbed.",
       "The file icon picks up a drag the moment you move, even with a quick flick, and every grab works. Before, a fast drag often ended before it began, and the grab after each drag did nothing.",
+      "Start a Scrolling Capture from the buttons at the top right of the window, between Capture window and Capture screen, as on the home screen.",
     ],
   },
   {
