@@ -442,6 +442,12 @@ pub fn export_settings_json(state: State<AppState>, path: String) -> Result<(), 
     std::fs::write(&path, raw).map_err(|err| format!("Could not write {path}: {err}"))
 }
 
+/// The connected screens, for the "Open the editor on" setting.
+#[tauri::command]
+pub fn screens(app: AppHandle) -> Vec<String> {
+    crate::placement::screen_names(&app)
+}
+
 #[tauri::command]
 pub fn permission_status() -> PermissionStatus {
     platform::permission_status()

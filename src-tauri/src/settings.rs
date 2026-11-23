@@ -102,6 +102,10 @@ pub struct Settings {
     /// macOS: Cmd+Q closes the window and leaves Lockshot in the menu bar,
     /// so the hotkeys keep working. Quit from the menu bar icon still quits.
     pub keep_running_in_background: bool,
+    /// The screen the editor opens on, by the name Settings lists it under.
+    /// Empty means the screen the capture was taken on (under the pointer).
+    /// A screen that is not connected falls back to that too.
+    pub editor_screen: String,
     pub theme: String,
     /// Setup on Home is finished; until then the window opens at launch.
     pub onboarded: bool,
@@ -128,6 +132,7 @@ impl Default for Settings {
             scroll_text: false,
             launch_at_login: true,
             keep_running_in_background: true,
+            editor_screen: String::new(),
             theme: "system".into(),
             onboarded: false,
             setup_step: String::new(),

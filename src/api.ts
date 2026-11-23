@@ -40,6 +40,7 @@ export const api = {
   applySettingsJson: (raw: string) => invoke<Settings>("apply_settings_json", { raw }),
   importSettingsJson: (path: string) => invoke<string>("import_settings_json", { path }),
   exportSettingsJson: (path: string) => invoke<void>("export_settings_json", { path }),
+  screens: () => invoke<string[]>("screens"),
   permissionStatus: () => invoke<PermissionStatus>("permission_status"),
   requestScreenPermission: () => invoke<PermissionStatus>("request_screen_permission"),
   requestInputPermission: () => invoke<PermissionStatus>("request_input_permission"),

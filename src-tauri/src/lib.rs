@@ -8,6 +8,7 @@ mod hotkeys;
 #[cfg(target_os = "macos")]
 mod menu;
 mod ocr;
+mod placement;
 mod platform;
 mod quick_save;
 mod scrolling;
@@ -49,6 +50,18 @@ pub fn show_main(app: &AppHandle, route: Option<&str>) {
         let _ = window.emit("navigate", route);
     }
     let _ = window.unminimize();
+    /*
+     * Open where the user is: on their virtual desktop, and on the screen
+     * they captured on or picked in Settings. Window calls from a capture's
+     * worker thread queue up on the main thread in order, so these land
+     * before the show.
+     */
+    let target = window.clone();
+    let handle = app.clone();
+    let _ = window.run_on_main_thread(move || {
+        platform::move_to_current_desktop(&target);
+        placement::place_main(&handle, &target);
+    });
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -133,6 +146,10 @@ pub fn run() {
         .register_uri_scheme_protocol("capture", capture::protocol)
         .setup(|app| {
             let handle = app.handle().clone();
+            /* Spaces: the window opens on the one the user is on (macOS). */
+            if let Some(main) = app.get_webview_window("main") {
+                platform::follow_active_space(&main);
+            }
             /*
              * A bundled build starts menu-bar-only straight away; its .app
              * supplies the name and icon. An unbundled dev binary has to
@@ -218,6 +235,7 @@ pub fn run() {
             commands::apply_settings_json,
             commands::import_settings_json,
             commands::export_settings_json,
+            commands::screens,
             commands::permission_status,
             commands::request_screen_permission,
             commands::request_input_permission,

@@ -31,6 +31,21 @@ const SECTIONS = [
   { id: "json", label: "JSON", icon: "document" },
 ];
 
+/* Screens for "Open the editor on"; a saved one that is unplugged stays listed. */
+const screens = ref<string[]>([]);
+api
+  .screens()
+  .then((names) => (screens.value = names))
+  .catch(() => {});
+const screenOptions = computed(() => {
+  const saved = settings.value?.editorScreen ?? "";
+  const options = screens.value.map((name) => ({ value: name, label: name }));
+  if (saved && !screens.value.includes(saved)) {
+    options.push({ value: saved, label: `${saved} (not connected)` });
+  }
+  return options;
+});
+
 const route = useRoute();
 const router = useRouter();
 /* Unknown sections (like the old About page) fall back to General. */
@@ -421,6 +436,18 @@ const EDITOR_KEYS = [
               <input v-model="settings.keepRunningInBackground" type="checkbox" @change="saveSettingsSoon" />
               <span />
             </label>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Open the editor on
+              <small>Lockshot always opens on the desktop you're on. Pick a screen to keep it there; if that screen is unplugged it opens where you captured.</small>
+            </div>
+            <div class="row-control">
+              <select v-model="settings.editorScreen" @change="saveSettingsSoon">
+                <option value="">The screen you captured on</option>
+                <option v-for="screen in screenOptions" :key="screen.value" :value="screen.value">{{ screen.label }}</option>
+              </select>
+            </div>
           </div>
           <div class="row">
             <div class="row-label">

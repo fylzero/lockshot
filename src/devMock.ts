@@ -110,6 +110,7 @@ export function installMock() {
     scrollText: false,
     launchAtLogin: true,
     keepRunningInBackground: true,
+    editorScreen: "",
     theme: "system",
     onboarded: !location.hash.includes("setup"),
     setupStep: "",
@@ -148,6 +149,8 @@ export function installMock() {
         return settings;
       case "latest_capture":
         return location.hash.includes("empty") ? null : { id: "sample", width: 1600, height: 1000 };
+      case "screens":
+        return ["Built-in Retina Display", "DELL U2720Q"];
       case "reregister_hotkeys":
         return [];
       case "system_screenshot_shortcuts":

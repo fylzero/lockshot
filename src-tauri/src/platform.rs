@@ -293,6 +293,81 @@ pub fn raise_overlay(window: &tauri::WebviewWindow) {
 pub fn raise_overlay(_window: &tauri::WebviewWindow) {}
 
 /**
+ * Let the main window follow the user between Spaces: when it is shown it
+ * moves to the Space they are on, instead of macOS switching them to the
+ * Space it was last on. Set once; must run on the main thread.
+ */
+#[cfg(target_os = "macos")]
+pub fn follow_active_space(window: &tauri::WebviewWindow) {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    /// NSWindowCollectionBehaviorMoveToActiveSpace
+    const MOVE_TO_ACTIVE_SPACE: usize = 1 << 1;
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    let ns_window = ns_window as *mut AnyObject;
+    if ns_window.is_null() {
+        return;
+    }
+    unsafe {
+        let behavior: usize = msg_send![ns_window, collectionBehavior];
+        let _: () = msg_send![ns_window, setCollectionBehavior: behavior | MOVE_TO_ACTIVE_SPACE];
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn follow_active_space(_window: &tauri::WebviewWindow) {}
+
+/**
+ * Windows: a hidden window stays on the virtual desktop it was last shown
+ * on, and showing it switches the user over there. Move it to the desktop
+ * of the window in front (the app they captured, or the one they were in)
+ * first. Leaves it alone when it is already on the current desktop or that
+ * desktop cannot be told. Must run on the main thread, where COM is set up.
+ */
+#[cfg(target_os = "windows")]
+pub fn move_to_current_desktop(window: &tauri::WebviewWindow) {
+    use windows::core::GUID;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
+    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let Ok(handle) = window.hwnd() else {
+        return;
+    };
+    let hwnd = HWND(handle.0 as _);
+    unsafe {
+        let Ok(manager) =
+            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
+        else {
+            return;
+        };
+        if manager
+            .IsWindowOnCurrentVirtualDesktop(hwnd)
+            .map_or(true, |on| on.as_bool())
+        {
+            return;
+        }
+        let front = GetForegroundWindow();
+        if front.is_invalid() || front == hwnd {
+            return;
+        }
+        match manager.GetWindowDesktopId(front) {
+            Ok(desktop) if desktop != GUID::zeroed() => {
+                let _ = manager.MoveWindowToDesktop(hwnd, &desktop);
+            }
+            _ => {}
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn move_to_current_desktop(_window: &tauri::WebviewWindow) {}
+
+/**
  * Put the app icon back on the Dock after switching from menu-bar-only to a
  * regular app. Bundled builds get it from the .app; an unbundled dev binary
  * only has the icon Tauri set at launch, which macOS drops while the app is

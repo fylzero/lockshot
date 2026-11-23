@@ -11,6 +11,8 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 23, 2026",
     notes: [
       "Numbered steps can point at things. Click and drag with the Numbered step tool and the stamp gets a cone that tapers to where you let go. A plain click still drops a plain stamp. Hold Shift to keep the cone at 45° angles, and drag the dot on a selected stamp's tip to point it somewhere else.",
+      "The editor opens where you are. Take a screenshot on another desktop (Space) and Lockshot comes to you, instead of switching you back to the desktop it was last open on. It also opens on the screen you captured on, rather than the one it was last on.",
+      "New setting: Open the editor on. Pick a screen in Settings › General to always open the editor there. If that screen is unplugged, the editor opens on the screen you captured on.",
     ],
   },
   {

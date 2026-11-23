@@ -39,6 +39,8 @@ export interface Settings {
   launchAtLogin: boolean;
   /** macOS: Cmd+Q hides the window and leaves Lockshot in the menu bar. */
   keepRunningInBackground: boolean;
+  /** The screen the editor opens on; empty means the one you captured on. */
+  editorScreen: string;
   theme: ThemePreference;
   onboarded: boolean;
   /** "permission", "hotkeys" or "tray" while setup is in progress. */
