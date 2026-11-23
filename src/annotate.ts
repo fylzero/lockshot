@@ -62,6 +62,10 @@ export interface StepShape extends Base {
   x: number;
   y: number;
   n: number;
+  /** Where the stamp's cone points, when it was dragged out. Missing on a
+      plain stamp and on stamps made before the cone existed. */
+  tx?: number;
+  ty?: number;
 }
 
 export type Shape = SegmentShape | StrokeShape | TextShape | StepShape;
@@ -116,6 +120,15 @@ function textLines(shape: TextShape) {
   return shape.text.split("\n");
 }
 
+/** The tip of a stamp's cone, or null when it has none (or it would hide under the circle). */
+export function stepTip(shape: StepShape) {
+  if (shape.tx == null || shape.ty == null) return null;
+  return Math.hypot(shape.tx - shape.x, shape.ty - shape.y) > shape.size * 1.2 ? { x: shape.tx, y: shape.ty } : null;
+}
+
+/** Half the width of a stamp's cone where it leaves the circle's center. */
+const coneHalfWidth = (size: number) => size * 0.6;
+
 export function textBounds(shape: TextShape): Rect {
   measureCtx.font = `700 ${shape.size}px ${TEXT_FONT}`;
   const lines = textLines(shape);
@@ -139,8 +152,14 @@ export function bounds(shape: Shape): Rect {
     }
     case "text":
       return textBounds(shape);
-    case "step":
-      return { x: shape.x - shape.size, y: shape.y - shape.size, w: shape.size * 2, h: shape.size * 2 };
+    case "step": {
+      const tip = stepTip(shape);
+      const x = Math.min(shape.x - shape.size, tip?.x ?? Infinity);
+      const y = Math.min(shape.y - shape.size, tip?.y ?? Infinity);
+      const right = Math.max(shape.x + shape.size, tip?.x ?? -Infinity);
+      const bottom = Math.max(shape.y + shape.size, tip?.y ?? -Infinity);
+      return { x, y, w: right - x, h: bottom - y };
+    }
     default: {
       const r = normalize(shape.x1, shape.y1, shape.x2, shape.y2);
       const pad = shape.kind === "blur" ? 0 : shape.width / 2;
@@ -188,6 +207,12 @@ export function hitTest(shape: Shape, x: number, y: number, slop: number) {
       }
       return false;
     }
+    case "step": {
+      if (Math.hypot(x - shape.x, y - shape.y) <= shape.size + slop) return true;
+      /* The cone tapers, so a third of the stamp's size is a fair reach along it. */
+      const tip = stepTip(shape);
+      return !!tip && distToSegment(x, y, shape.x, shape.y, tip.x, tip.y) <= shape.size / 3 + slop;
+    }
     default: {
       const b = bounds(shape);
       return x >= b.x - slop && x <= b.x + b.w + slop && y >= b.y - slop && y <= b.y + b.h + slop;
@@ -201,8 +226,14 @@ export function translate(shape: Shape, dx: number, dy: number): Shape {
     case "highlighter":
       return { ...shape, points: shape.points.map((v, i) => v + (i % 2 ? dy : dx)) };
     case "text":
-    case "step":
       return { ...shape, x: shape.x + dx, y: shape.y + dy };
+    case "step":
+      return {
+        ...shape,
+        x: shape.x + dx,
+        y: shape.y + dy,
+        ...(shape.tx != null && shape.ty != null ? { tx: shape.tx + dx, ty: shape.ty + dy } : {}),
+      };
     default:
       return { ...shape, x1: shape.x1 + dx, y1: shape.y1 + dy, x2: shape.x2 + dx, y2: shape.y2 + dy };
   }
@@ -226,6 +257,31 @@ function drawArrow(ctx: CanvasRenderingContext2D, s: SegmentShape) {
   ctx.lineTo(s.x2 - head * Math.cos(angle + spread), s.y2 - head * Math.sin(angle + spread));
   ctx.closePath();
   ctx.fill();
+}
+
+/**
+ * The stamp's circle and, when dragged out, a cone tapering from its center
+ * to the tip, as one path so the fill and its shadow read as a single shape.
+ */
+function stepPath(ctx: CanvasRenderingContext2D, s: StepShape) {
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+  const tip = stepTip(s);
+  if (!tip) return;
+  const len = Math.hypot(tip.x - s.x, tip.y - s.y);
+  const hw = coneHalfWidth(s.size);
+  const px = (-(tip.y - s.y) / len) * hw;
+  const py = ((tip.x - s.x) / len) * hw;
+  let a = { x: s.x + px, y: s.y + py };
+  let b = { x: s.x - px, y: s.y - py };
+  /* Wind the triangle the same way as the circle, or the nonzero fill
+     would punch a hole where the two overlap. */
+  const area = a.x * tip.y - tip.x * a.y + (tip.x * b.y - b.x * tip.y) + (b.x * a.y - a.x * b.y);
+  if (area < 0) [a, b] = [b, a];
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.closePath();
 }
 
 function strokePoints(ctx: CanvasRenderingContext2D, points: number[]) {
@@ -385,10 +441,11 @@ export function drawShape(ctx: CanvasRenderingContext2D, shape: Shape, source: C
       ctx.shadowColor = "rgb(0 0 0 / 0.35)";
       ctx.shadowBlur = shape.size / 3;
       ctx.shadowOffsetY = shape.size / 10;
-      ctx.beginPath();
-      ctx.arc(shape.x, shape.y, shape.size, 0, Math.PI * 2);
+      stepPath(ctx, shape);
       ctx.fill();
       ctx.shadowColor = "transparent";
+      ctx.beginPath();
+      ctx.arc(shape.x, shape.y, shape.size, 0, Math.PI * 2);
       ctx.lineWidth = Math.max(2, shape.size / 8);
       ctx.strokeStyle = "#fff";
       ctx.stroke();

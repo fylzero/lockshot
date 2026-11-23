@@ -12,6 +12,7 @@ import {
   hitTest,
   newId,
   normalize,
+  stepTip,
   renderFinal,
   TEXT_FONT,
   TEXT_LINE_HEIGHT,
@@ -19,6 +20,7 @@ import {
   type Rect,
   type RedactMode,
   type Shape,
+  type StepShape,
   textOutlineColor,
   textOutlineWidth,
   type TextOutline,
@@ -434,6 +436,7 @@ function isSegment(shape: ResizableShape) {
  * redact area or text, or the lower-right end of a line or arrow.
  */
 function resizeCorner(shape: Shape | null) {
+  if (shape?.kind === "step") return stepTip(shape);
   if (shape?.kind === "text") {
     const b = bounds(shape);
     return { x: b.x + b.w, y: b.y + b.h };
@@ -471,6 +474,8 @@ let drag: {
   textHeight?: number;
   /** The highlighter's freehand path, kept while Shift straightens the stroke. */
   path?: number[];
+  /** Set while a stamp's cone tip is dragged to point somewhere else. */
+  tip?: boolean;
 } | null = null;
 
 function onPointerDown(event: PointerEvent) {
@@ -499,6 +504,10 @@ function onPointerDown(event: PointerEvent) {
   }
 
   const selected = selectedShape.value;
+  if (selected?.kind === "step" && onResizeCorner(p)) {
+    drag = { start: p, moved: false, original: selected, tip: true };
+    return;
+  }
   if (selected?.kind === "text" && onResizeCorner(p)) {
     drag = { start: p, moved: false, original: selected, corner: { x: selected.x, y: selected.y }, textHeight: bounds(selected).h };
     return;
@@ -545,9 +554,11 @@ function onPointerDown(event: PointerEvent) {
       });
       return;
     case "step": {
+      /* A click drops the stamp; dragging from it draws a cone to where
+         the pointer lets go, pointing at the thing it numbers. */
       const n = Math.max(0, ...shapes.value.map((s) => (s.kind === "step" ? s.n : 0))) + 1;
-      commit([...shapes.value, { id: newId(), kind: "step", color: color.value, size: sizeFor("step"), x: p.x, y: p.y, n }]);
-      return;
+      draft = { id: newId(), kind: "step", color: color.value, size: sizeFor("step"), x: p.x, y: p.y, n };
+      break;
     }
     case "pen":
     case "highlighter":
@@ -635,6 +646,12 @@ function onPointerMove(event: PointerEvent) {
     shapes.value = shapes.value.map((s) => (s.id === resized.id ? resized : s));
     return;
   }
+  if (drag.tip && drag.original?.kind === "step") {
+    if (!drag.moved) return;
+    const aimed = { ...drag.original, ...aimStep(drag.original, p, event.shiftKey) };
+    shapes.value = shapes.value.map((s) => (s.id === aimed.id ? aimed : s));
+    return;
+  }
   if (drag.original) {
     if (!drag.moved) return;
     const moved = translate(drag.original, p.x - drag.start.x, p.y - drag.start.y);
@@ -642,7 +659,9 @@ function onPointerMove(event: PointerEvent) {
     return;
   }
   if (!draft) return;
-  if ((draft.kind === "pen" || draft.kind === "highlighter") && drag.path) {
+  if (draft.kind === "step") {
+    if (drag.moved) Object.assign(draft, aimStep(draft, p, event.shiftKey));
+  } else if ((draft.kind === "pen" || draft.kind === "highlighter") && drag.path) {
     /* Shift straightens the stroke from where it started: the highlighter
        always runs horizontally, the pen horizontally or vertically,
        whichever way the pointer has gone further. Letting go of Shift
@@ -699,6 +718,15 @@ function onPointerUp() {
   const shape = draft;
   draft = null;
   if (!shape) return;
+  if (shape.kind === "step") {
+    /* A cone too short to clear the circle is just a plain stamp. */
+    if (!stepTip(shape)) {
+      delete shape.tx;
+      delete shape.ty;
+    }
+    commit([...shapes.value, shape]);
+    return;
+  }
   const tooSmall =
     "x2" in shape
       ? Math.hypot(shape.x2 - shape.x1, shape.y2 - shape.y1) * cssScale.value < 4
@@ -708,6 +736,14 @@ function onPointerUp() {
     return;
   }
   commit([...shapes.value, shape]);
+}
+
+/** The cone tip for a stamp aimed at `p`. Shift keeps it at 45° steps. */
+function aimStep(shape: StepShape, p: { x: number; y: number }, snap: boolean) {
+  if (!snap) return { tx: p.x, ty: p.y };
+  const len = Math.hypot(p.x - shape.x, p.y - shape.y);
+  const angle = Math.round(Math.atan2(p.y - shape.y, p.x - shape.x) / (Math.PI / 4)) * (Math.PI / 4);
+  return { tx: shape.x + Math.cos(angle) * len, ty: shape.y + Math.sin(angle) * len };
 }
 
 /* ---- Style ---- */

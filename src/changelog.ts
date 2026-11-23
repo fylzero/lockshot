@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.6",
+    date: "November 23, 2026",
+    notes: [
+      "Numbered steps can point at things. Click and drag with the Numbered step tool and the stamp gets a cone that tapers to where you let go. A plain click still drops a plain stamp. Hold Shift to keep the cone at 45° angles, and drag the dot on a selected stamp's tip to point it somewhere else.",
+    ],
+  },
+  {
     version: "1.3.5",
     date: "November 22, 2026",
     notes: [
