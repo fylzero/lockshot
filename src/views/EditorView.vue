@@ -185,6 +185,7 @@ watch(
         image.value?.close();
         image.value = bitmap;
         firstShow = true;
+        opening.value = true;
         await nextTick();
         /* A new tab's image often loads before the tab is switched to; it
         opens when the tab shows (the active watcher). */
@@ -202,24 +203,54 @@ watch(
 /** The image has not been shown yet: size the window to it when it first is. */
 let firstShow = false;
 
+/** A new image is being opened: hidden until its window size and zoom are settled. */
+const opening = ref(false);
+
+/** The stage's padding on both sides, which fit() also leaves clear. */
+const STAGE_PAD = 48;
+
+/** The space the image needs at 1:1, in CSS pixels, with the stage's padding. */
+function actualSizeNeed() {
+  return { w: Math.ceil(view.value.w / dpr) + STAGE_PAD, h: Math.ceil(view.value.h / dpr) + STAGE_PAD };
+}
+
+/** The stage's size, scrollbars included, so a scrollbar never counts as chrome. */
+function stageBox() {
+  const rect = stage.value!.getBoundingClientRect();
+  return { w: Math.floor(rect.width), h: Math.floor(rect.height) };
+}
+
 /**
- * Show a newly loaded image: at 1:1 when it fits on the screen, sizing the
- * window to it, or fitted when it is too big for the screen.
+ * Show a newly loaded image at 1:1 (100%), with the window sized to hold it
+ * and no scrollbars. Only an image too big for the window even at the
+ * screen's size is fitted instead. It stays hidden until that is settled,
+ * so it never flashes at another zoom first.
  */
 async function openImage() {
   if (!firstShow) return;
   firstShow = false;
-  if (settings.value?.resizeWindowToCapture) await sizeWindowToImage();
+  opening.value = true;
+  fitMode.value = false;
+  zoom.value = 1;
+  try {
+    await nextTick();
+    if (settings.value?.resizeWindowToCapture) await sizeWindowToImage();
+    if (!stage.value) return;
+    const need = actualSizeNeed();
+    const box = stageBox();
+    if (settings.value?.alwaysActualSize || (need.w <= box.w && need.h <= box.h)) {
+      setZoom(1);
+    } else {
+      fitMode.value = true;
+      fit();
+    }
+  } finally {
+    opening.value = false;
+  }
   if (settings.value?.alwaysActualSize) {
-    setZoom(1);
-    /* Start at the top left, where most screenshots begin. */
+    /* A capture bigger than the window starts at the top left. */
     await nextTick();
     stage.value?.scrollTo(0, 0);
-  } else {
-    /* Fit never zooms past 1:1. Until the resize lands it may measure the
-    old window; the resize observer fits again once it does. */
-    fitMode.value = true;
-    fit();
   }
   draw();
 }
@@ -310,9 +341,8 @@ function cancelCrop() {
 function fit() {
   /* A hidden tab's stage measures 0; it refits when it becomes visible. */
   if (!stage.value || !view.value.w || !stage.value.clientWidth) return;
-  const pad = 48;
-  const availW = Math.max(50, stage.value.clientWidth - pad) * dpr;
-  const availH = Math.max(50, stage.value.clientHeight - pad) * dpr;
+  const availW = Math.max(50, stage.value.clientWidth - STAGE_PAD) * dpr;
+  const availH = Math.max(50, stage.value.clientHeight - STAGE_PAD) * dpr;
   zoom.value = Math.min(1, availW / view.value.w, availH / view.value.h);
 }
 
@@ -320,29 +350,36 @@ function fit() {
 const MIN_WINDOW = { width: 760, height: 520 };
 
 /**
- * Size the window to show the whole image at 1:1, with the stage's padding.
- * The system keeps it within the screen; anything that still doesn't fit
- * is shrunk by Fit.
+ * Size the window so the stage holds the image at 1:1. The page can come
+ * out smaller than asked (the macOS title bar is not always counted), and
+ * the toolbar wraps onto more rows in a narrow window, so after each resize
+ * this measures what the page actually got and asks again for the
+ * difference. It stops once the image fits or the screen gives no more room.
  */
 async function sizeWindowToImage() {
-  /*
-   * The toolbar wraps onto more rows in a narrow window, so the space around
-   * the stage measured before a resize can be wrong after it. Measure again
-   * once the window has its new size, and correct it (up to twice more).
-   */
-  for (let pass = 0; pass < 3; pass++) {
+  let ask: { w: number; h: number } | null = null;
+  for (let pass = 0; pass < 4; pass++) {
     if (!stage.value || !view.value.w) return;
-    const chromeW = window.innerWidth - stage.value.clientWidth;
-    const chromeH = window.innerHeight - stage.value.clientHeight;
-    /* fit() keeps 48px clear around the image; 2 more so no scrollbar appears. */
-    const pad = 50;
-    const width = Math.max(MIN_WINDOW.width, Math.ceil(chromeW + view.value.w / dpr + pad));
-    const height = Math.max(MIN_WINDOW.height, Math.ceil(chromeH + view.value.h / dpr + pad));
-    if (width === window.innerWidth && height === window.innerHeight) return;
-    /* After the first pass, only grow to make room; the screen may not allow more. */
-    if (pass > 0 && width <= window.innerWidth && height <= window.innerHeight) return;
+    const image = actualSizeNeed();
+    const box = stageBox();
+    /* The page size that holds the image, with the toolbars as they are now. */
+    const need = {
+      w: window.innerWidth - box.w + image.w,
+      h: window.innerHeight - box.h + image.h,
+    };
+    if (ask === null) {
+      ask = { w: Math.max(MIN_WINDOW.width, need.w), h: Math.max(MIN_WINDOW.height, need.h) };
+      if (ask.w === window.innerWidth && ask.h === window.innerHeight) return;
+    } else {
+      if (window.innerWidth >= need.w && window.innerHeight >= need.h) return;
+      /* Ask for more by however much the page came up short. */
+      ask = {
+        w: ask.w + Math.max(0, need.w - window.innerWidth),
+        h: ask.h + Math.max(0, need.h - window.innerHeight),
+      };
+    }
     const before = [window.innerWidth, window.innerHeight];
-    await api.sizeMainWindow(width, height).catch(() => {});
+    await api.sizeMainWindow(ask.w, ask.h).catch(() => {});
     await windowResized(before);
     /* The screen would not give it any more room: Fit takes over. */
     if (window.innerWidth === before[0] && window.innerHeight === before[1]) return;
@@ -1390,6 +1427,7 @@ onBeforeUnmount(() => {
       <p v-if="loadError" class="muted">{{ loadError }}</p>
       <div
         v-else-if="image"
+        v-show="!opening"
         class="canvas-wrap"
         :style="{ width: `${view.w * cssScale}px`, height: `${view.h * cssScale}px` }"
       >
@@ -1426,11 +1464,12 @@ onBeforeUnmount(() => {
       </div>
       <div v-if="image" class="zoom-controls">
         <button title="Zoom out" @click="setZoom(zoom / 1.25)">−</button>
-        <span>{{ Math.round(zoom * 100) }}%</span>
+        <!-- Blank while a new capture opens, so it never shows a zoom it is about to leave. -->
+        <span :style="{ visibility: opening ? 'hidden' : undefined }">{{ Math.round(zoom * 100) }}%</span>
         <button title="Zoom in" @click="setZoom(zoom * 1.25)">+</button>
         <!-- Fit never zooms past 1:1, so an image that fits shows as 1:1. -->
-        <button :class="{ primary: fitMode && zoom < 1 }" :title="`Fit (${modKey}0)`" @click="fitMode = true; fit()">Fit</button>
-        <button :class="{ primary: zoom === 1 }" title="Actual pixels" @click="setZoom(1)">1:1</button>
+        <button :class="{ primary: !opening && fitMode && zoom < 1 }" :title="`Fit (${modKey}0)`" @click="fitMode = true; fit()">Fit</button>
+        <button :class="{ primary: !opening && zoom === 1 }" title="Actual pixels" @click="setZoom(1)">1:1</button>
         <span class="zoom-size" title="Image size in pixels, after any crop">{{ outputSize.width }} × {{ outputSize.height }}</span>
       </div>
       <FileBadge
