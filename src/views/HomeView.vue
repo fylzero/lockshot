@@ -104,7 +104,10 @@ async function usePreset(which = preset.value) {
   <div class="home">
     <div v-if="settings" class="home-inner">
       <div class="home-hero">
-        <img src="/app-icon.png" alt="Lockshot" />
+        <!-- The emblem is drawn for a dark background; in light mode show it
+             on its own dark tile (the macOS app icon) instead. -->
+        <img class="hero-dark" src="/app-icon.png" alt="Lockshot" />
+        <img class="hero-light" src="/app-icon-light.png" alt="Lockshot" />
         <p v-if="step === 'done'" class="muted">
           Capture from anywhere with a hotkey or the Lockshot icon in the {{ trayName }}.
         </p>

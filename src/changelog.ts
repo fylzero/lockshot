@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.3.5",
+    date: "November 22, 2026",
+    notes: [
+      "In the light theme, the logo on the home screen sits on its dark rounded tile, so it no longer shows rough dark edges and pale lettering on the light background.",
+    ],
+  },
+  {
     version: "1.3.4",
     date: "November 21, 2026",
     notes: [

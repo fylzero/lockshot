@@ -329,6 +329,21 @@ a {
   filter: drop-shadow(0 18px 30px var(--shadow));
 }
 
+.home-hero img.hero-light {
+  display: none;
+}
+
+:root[data-theme="light"] .home-hero img.hero-dark {
+  display: none;
+}
+
+/* The app icon tile already has its own margin, so no pull-up. */
+:root[data-theme="light"] .home-hero img.hero-light {
+  display: block;
+  margin-top: -0.5rem;
+  margin-bottom: 0.4rem;
+}
+
 .home-hero p {
   margin: 0;
   font-size: 1.05rem;
