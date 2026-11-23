@@ -236,6 +236,7 @@ pub fn run() {
             commands::import_settings_json,
             commands::export_settings_json,
             commands::screens,
+            commands::size_main_window,
             commands::permission_status,
             commands::request_screen_permission,
             commands::request_input_permission,

@@ -111,6 +111,8 @@ export function installMock() {
     launchAtLogin: true,
     keepRunningInBackground: true,
     editorScreen: "",
+    resizeWindowToCapture: true,
+    alwaysActualSize: false,
     theme: "system",
     onboarded: !location.hash.includes("setup"),
     setupStep: "",

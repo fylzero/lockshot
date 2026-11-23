@@ -451,6 +451,26 @@ const EDITOR_KEYS = [
           </div>
           <div class="row">
             <div class="row-label">
+              Resize the window to each capture
+              <small>The window grows or shrinks to show a capture or opened image at 1:1, up to the size of the screen.</small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.resizeWindowToCapture" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Always open captures at 1:1
+              <small>Show every pixel at its real size and scroll to see the rest. Off, a capture opens at 1:1 when it fits and is shrunk to fit when it doesn't.</small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.alwaysActualSize" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-label">
               Copy every capture to the clipboard
               <small>Paste straight into chat or docs without saving. Also applies to saves without editing.</small>
             </div>

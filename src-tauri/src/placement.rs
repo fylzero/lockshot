@@ -199,6 +199,80 @@ pub fn place_main(app: &AppHandle, window: &WebviewWindow) {
     }
 }
 
+/**
+ * Where to put a window of `width` × `height` (native units, frame included)
+ * that was at `current`: centred where it was, shrunk to the screen if it is
+ * bigger, and slid back onto the screen if it would hang off an edge.
+ */
+fn resized(area: Rect, current: Rect, width: f64, height: f64) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let (cx, cy) = current.center();
+    Rect {
+        x: (cx - width / 2.0).clamp(area.x, area.x + area.width - width),
+        y: (cy - height / 2.0).clamp(area.y, area.y + area.height - height),
+        width,
+        height,
+    }
+}
+
+/**
+ * Size the main window so its content area is `width` × `height` logical
+ * pixels, as big as the screen it is on allows. A full-screen window, or a
+ * maximized one off macOS, is left alone: the user chose that size.
+ */
+pub fn size_main(window: &WebviewWindow, width: f64, height: f64) {
+    if window.is_fullscreen().unwrap_or(false) {
+        return;
+    }
+    /* macOS calls a window that fills the screen "zoomed"; that is not a choice to keep. */
+    if !cfg!(target_os = "macos") && window.is_maximized().unwrap_or(false) {
+        return;
+    }
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let (Ok(pos), Ok(outer), Ok(inner)) = (
+        window.outer_position(),
+        window.outer_size(),
+        window.inner_size(),
+    ) else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let current = Rect {
+        x: native(pos.x as f64, scale),
+        y: native(pos.y as f64, scale),
+        width: native(outer.width as f64, scale),
+        height: native(outer.height as f64, scale),
+    };
+    /* The title bar and borders, which the content does not get. */
+    let frame_w = native(outer.width.saturating_sub(inner.width) as f64, scale);
+    let frame_h = native(outer.height.saturating_sub(inner.height) as f64, scale);
+    /* Logical pixels are points on macOS and scaled pixels elsewhere. */
+    let to_native = if cfg!(target_os = "macos") { 1.0 } else { scale };
+    let next = resized(
+        work_rect(&monitor),
+        current,
+        width * to_native + frame_w,
+        height * to_native + frame_h,
+    );
+    let (content_w, content_h) = (next.width - frame_w, next.height - frame_h);
+    if cfg!(target_os = "macos") {
+        let _ = window.set_size(tauri::LogicalSize::new(content_w, content_h));
+        let _ = window.set_position(tauri::LogicalPosition::new(next.x, next.y));
+    } else {
+        let _ = window.set_size(tauri::PhysicalSize::new(
+            content_w.round() as u32,
+            content_h.round() as u32,
+        ));
+        let _ = window.set_position(tauri::PhysicalPosition::new(
+            next.x.round() as i32,
+            next.y.round() as i32,
+        ));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,6 +284,48 @@ mod tests {
             labels(&names),
             ["DELL", "Built-in", "DELL (2)", "DELL (3)"].map(String::from)
         );
+    }
+
+    #[test]
+    fn resizes_around_the_window_and_stays_on_screen() {
+        let area = Rect {
+            x: 0.0,
+            y: 25.0,
+            width: 1600.0,
+            height: 900.0,
+        };
+        let current = Rect {
+            x: 400.0,
+            y: 200.0,
+            width: 800.0,
+            height: 600.0,
+        };
+        /* Grows around its centre while there is room. */
+        assert_eq!(
+            resized(area, current, 1000.0, 600.0),
+            Rect {
+                x: 300.0,
+                y: 200.0,
+                width: 1000.0,
+                height: 600.0
+            }
+        );
+        /* Slides back on screen rather than hang off the bottom. */
+        let low = Rect {
+            y: 300.0,
+            ..current
+        };
+        assert_eq!(
+            resized(area, low, 800.0, 800.0),
+            Rect {
+                x: 400.0,
+                y: 125.0,
+                width: 800.0,
+                height: 800.0
+            }
+        );
+        /* Never bigger than the screen. */
+        assert_eq!(resized(area, current, 3000.0, 2000.0), area);
     }
 
     #[test]

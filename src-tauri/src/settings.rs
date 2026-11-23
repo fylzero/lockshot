@@ -106,6 +106,11 @@ pub struct Settings {
     /// Empty means the screen the capture was taken on (under the pointer).
     /// A screen that is not connected falls back to that too.
     pub editor_screen: String,
+    /// Size the window to each capture that opens, up to the screen's size.
+    pub resize_window_to_capture: bool,
+    /// Open every capture at 1:1, even one too big for the window. Off, a
+    /// capture opens at 1:1 if it fits and is shrunk to fit if it does not.
+    pub always_actual_size: bool,
     pub theme: String,
     /// Setup on Home is finished; until then the window opens at launch.
     pub onboarded: bool,
@@ -133,6 +138,8 @@ impl Default for Settings {
             launch_at_login: true,
             keep_running_in_background: true,
             editor_screen: String::new(),
+            resize_window_to_capture: true,
+            always_actual_size: false,
             theme: "system".into(),
             onboarded: false,
             setup_step: String::new(),
@@ -359,6 +366,8 @@ mod tests {
         assert!(from_json(r#"{ "launchAtLogin": 1 }"#).is_err());
         assert!(from_json(r#"{ "keepRunningInBackground": "no" }"#).is_err());
         assert!(from_json(r#"{ "quickSave": "on" }"#).is_err());
+        assert!(from_json(r#"{ "resizeWindowToCapture": "yes" }"#).is_err());
+        assert!(from_json(r#"{ "alwaysActualSize": 1 }"#).is_err());
         assert!(from_json(r#"{ "scrollDirection": "left" }"#).is_err());
         assert!(from_json(r#"{ "scrollDelayMs": 10 }"#).is_err());
         assert!(from_json(r#"{ "scrollMaxPages": 0 }"#).is_err());

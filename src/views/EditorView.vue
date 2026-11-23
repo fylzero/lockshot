@@ -34,7 +34,7 @@ import { settings, showToast, type CaptureDoc } from "../store";
  * active tab's, so annotations and undo history survive switching tabs.
  */
 const props = defineProps<{ capture: CaptureDoc; active: boolean }>();
-import { errorMessage } from "../api";
+import { api, errorMessage } from "../api";
 import { loadBitmap } from "../pixels";
 import { modKey } from "../platform";
 
@@ -185,8 +185,16 @@ watch(
         image.value?.close();
         image.value = bitmap;
         await nextTick();
-        fitMode.value = true;
-        fit();
+        if (settings.value?.resizeWindowToCapture && props.active) await sizeWindowToImage();
+        if (settings.value?.alwaysActualSize) {
+          setZoom(1);
+          /* Start at the top left, where most screenshots begin. */
+          await nextTick();
+          stage.value?.scrollTo(0, 0);
+        } else {
+          fitMode.value = true;
+          fit();
+        }
         draw();
         if (settings.value?.copyOnCapture) void copy(true);
       })
@@ -287,6 +295,26 @@ function fit() {
   const availW = Math.max(50, stage.value.clientWidth - pad) * dpr;
   const availH = Math.max(50, stage.value.clientHeight - pad) * dpr;
   zoom.value = Math.min(1, availW / view.value.w, availH / view.value.h);
+}
+
+/* The smallest window, as tauri.conf.json sets it. */
+const MIN_WINDOW = { width: 760, height: 520 };
+
+/**
+ * Size the window to show the whole image at 1:1, with the stage's padding.
+ * The system keeps it within the screen; anything that still doesn't fit
+ * is shrunk by Fit.
+ */
+async function sizeWindowToImage() {
+  if (!stage.value || !view.value.w) return;
+  const chromeW = window.innerWidth - stage.value.clientWidth;
+  const chromeH = window.innerHeight - stage.value.clientHeight;
+  /* fit() keeps 48px clear around the image; 2 more so no scrollbar appears. */
+  const pad = 50;
+  const width = Math.max(MIN_WINDOW.width, Math.ceil(chromeW + view.value.w / dpr + pad));
+  const height = Math.max(MIN_WINDOW.height, Math.ceil(chromeH + view.value.h / dpr + pad));
+  if (width === window.innerWidth && height === window.innerHeight) return;
+  await api.sizeMainWindow(width, height).catch(() => {});
 }
 
 function setZoom(next: number) {
@@ -1351,7 +1379,7 @@ onBeforeUnmount(() => {
         <span>{{ Math.round(zoom * 100) }}%</span>
         <button title="Zoom in" @click="setZoom(zoom * 1.25)">+</button>
         <button :class="{ primary: fitMode }" :title="`Fit (${modKey}0)`" @click="fitMode = true; fit()">Fit</button>
-        <button title="Actual pixels" @click="setZoom(1)">1:1</button>
+        <button :class="{ primary: !fitMode && zoom === 1 }" title="Actual pixels" @click="setZoom(1)">1:1</button>
         <span class="zoom-size" title="Image size in pixels, after any crop">{{ outputSize.width }} × {{ outputSize.height }}</span>
       </div>
       <FileBadge

@@ -41,6 +41,8 @@ export const api = {
   importSettingsJson: (path: string) => invoke<string>("import_settings_json", { path }),
   exportSettingsJson: (path: string) => invoke<void>("export_settings_json", { path }),
   screens: () => invoke<string[]>("screens"),
+  /** Size the window so its content area is width × height CSS pixels. */
+  sizeMainWindow: (width: number, height: number) => invoke<void>("size_main_window", { width, height }),
   permissionStatus: () => invoke<PermissionStatus>("permission_status"),
   requestScreenPermission: () => invoke<PermissionStatus>("request_screen_permission"),
   requestInputPermission: () => invoke<PermissionStatus>("request_input_permission"),

@@ -442,6 +442,15 @@ pub fn export_settings_json(state: State<AppState>, path: String) -> Result<(), 
     std::fs::write(&path, raw).map_err(|err| format!("Could not write {path}: {err}"))
 }
 
+/// Size the main window to show `width` × `height` logical pixels of
+/// content, for a capture that just opened.
+#[tauri::command]
+pub fn size_main_window(app: AppHandle, width: f64, height: f64) {
+    if let Some(window) = app.get_webview_window("main") {
+        crate::placement::size_main(&window, width, height);
+    }
+}
+
 /// The connected screens, for the "Open the editor on" setting.
 #[tauri::command]
 pub fn screens(app: AppHandle) -> Vec<String> {

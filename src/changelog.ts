@@ -13,6 +13,9 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Numbered steps can point at things. Click and drag with the Numbered step tool and the stamp gets a cone that tapers to where you let go. A plain click still drops a plain stamp. Hold Shift to keep the cone at 45° angles, and drag the dot on a selected stamp's tip to point it somewhere else.",
       "The editor opens where you are. Take a screenshot on another desktop (Space) and Lockshot comes to you, instead of switching you back to the desktop it was last open on. It also opens on the screen you captured on, rather than the one it was last on.",
       "New setting: Open the editor on. Pick a screen in Settings › General to always open the editor there. If that screen is unplugged, the editor opens on the screen you captured on.",
+      "The window sizes itself to each capture or opened image, so it shows at 1:1 with no wasted space. A capture too big for the screen fills the screen and is shrunk to fit. Turn this off in Settings › General with Resize the window to each capture.",
+      "New setting: Always open captures at 1:1. Turn it on in Settings › General to see every capture at its actual pixels, starting at the top left, even one too big for the window.",
+      "The 1:1 button in the editor lights up while you're viewing at 1:1, the way Fit does.",
     ],
   },
   {
