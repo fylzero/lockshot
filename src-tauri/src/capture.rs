@@ -478,8 +478,12 @@ pub fn refit_overlay(app: &AppHandle, label: &str) -> Result<(), String> {
     let bounds = {
         let state = app.state::<CaptureState>();
         let session = state.session.lock().unwrap();
-        let session = session.as_ref().ok_or("This capture has already finished.")?;
-        let index = session.index_of(display).ok_or("That display is no longer available.")?;
+        let session = session
+            .as_ref()
+            .ok_or("This capture has already finished.")?;
+        let index = session
+            .index_of(display)
+            .ok_or("That display is no longer available.")?;
         session.shots[index].bounds
     };
     place_overlay(app, &bounds, false).map(|_| ())
