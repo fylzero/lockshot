@@ -37,6 +37,15 @@ pub struct Pane {
     pub bottom: usize,
 }
 
+/// The text read off the long image.
+pub struct Text {
+    pub text: String,
+    /// Nothing was read, or nothing found.
+    pub empty: bool,
+    /// False when reading was skipped before the end.
+    pub whole: bool,
+}
+
 pub struct Stitcher {
     up: bool,
     /// Write the image. Off, the rows only go to the text reader.
@@ -139,14 +148,17 @@ impl Stitcher {
 
     /// Add what is left of the last page and write the image. Returns the
     /// files written, and the text when it was read. `stage` hears what it
-    /// is doing, such as "Stitching the long image…", for the Saving notice.
+    /// is doing, such as "Stitching the long image…", for the Saving notice,
+    /// and whether that can be skipped (reading the text can). Once
+    /// `skip_text` says so, reading stops and the text so far is kept.
     pub fn finish(
         mut self,
         last: &RgbaImage,
-        stage: &mut dyn FnMut(String),
-    ) -> Result<(Vec<PathBuf>, Option<String>), String> {
+        stage: &mut dyn FnMut(String, bool),
+        skip_text: &dyn Fn() -> bool,
+    ) -> Result<(Vec<PathBuf>, Option<Text>), String> {
         if self.image {
-            stage("Stitching the long image…".into());
+            stage("Stitching the long image…".into(), false);
         }
         let height = last.height() as usize;
         match self.edge {
@@ -156,17 +168,27 @@ impl Stitcher {
         }
         self.flush()?;
         let text = self.text.take().map(|reader| {
-            let blocks = reader.finish(|read, total| {
-                stage(if total > 1 {
-                    format!(
-                        "Reading the text (OCR), part {} of {total}…",
-                        (read + 1).min(total)
+            let (blocks, whole) = reader.finish(
+                |read, total| {
+                    stage(
+                        if total > 1 {
+                            format!(
+                                "Reading the text (OCR), part {} of {total}…",
+                                (read + 1).min(total)
+                            )
+                        } else {
+                            "Reading the text (OCR)…".into()
+                        },
+                        true,
                     )
-                } else {
-                    "Reading the text (OCR)…".into()
-                })
-            });
-            ocr::text(&blocks)
+                },
+                skip_text,
+            );
+            Text {
+                empty: blocks.iter().all(Vec::is_empty),
+                text: ocr::text(&blocks),
+                whole,
+            }
         });
         /* Parts were written in scroll order: when scrolling up, the last
         one is the top of the content. */
@@ -339,7 +361,7 @@ mod tests {
         };
         s.add(&pages[0], &pages[1], pane(5)).unwrap();
         s.add(&pages[1], &pages[2], pane(6)).unwrap();
-        let (files, _) = s.finish(&pages[2], &mut |_| {}).unwrap();
+        let (files, _) = s.finish(&pages[2], &mut |_, _| {}, &|| false).unwrap();
         assert_eq!(files.len(), 1);
         let mut expected = vec![-1];
         expected.extend(1..=19);
@@ -363,7 +385,7 @@ mod tests {
         };
         s.add(&pages[0], &pages[1], pane(5)).unwrap();
         s.add(&pages[1], &pages[2], pane(6)).unwrap();
-        let (files, _) = s.finish(&pages[2], &mut |_| {}).unwrap();
+        let (files, _) = s.finish(&pages[2], &mut |_, _| {}, &|| false).unwrap();
         let mut expected = vec![-1];
         expected.extend(10..=28);
         expected.push(-2);
@@ -376,7 +398,7 @@ mod tests {
         let out = dir("one");
         let s = Stitcher::new(out.clone(), "gif", 90, false, true, None);
         let page = window(0, 10);
-        let (files, _) = s.finish(&page, &mut |_| {}).unwrap();
+        let (files, _) = s.finish(&page, &mut |_, _| {}, &|| false).unwrap();
         assert_eq!(files[0].file_name().unwrap(), "Long image.png");
         assert_eq!(rows_of(&files[0]).len(), 10);
         std::fs::remove_dir_all(out).unwrap();

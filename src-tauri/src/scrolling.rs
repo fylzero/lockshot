@@ -31,6 +31,7 @@ use crate::{export, frame, hotkeys, ocr, platform, quick_save};
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
+static SKIP_TEXT: AtomicBool = AtomicBool::new(false);
 
 /// The action the temporary Esc hotkey runs while a capture is going.
 pub const STOP_ACTION: &str = "scroll-stop";
@@ -55,6 +56,13 @@ pub fn stop() {
     STOP.store(true, Ordering::SeqCst);
     /* Give the mouse back at once, not after the files are written. */
     platform::unlock_pointer();
+}
+
+/// The Skip button on the Saving notice: stop reading the text and keep
+/// what was read so far.
+pub fn skip_text() {
+    debug_log("skip reading the text");
+    SKIP_TEXT.store(true, Ordering::SeqCst);
 }
 
 /// The area to scroll and capture, in the units xcap reports displays in
@@ -105,6 +113,7 @@ pub fn start(app: &AppHandle, target: Target) -> Result<(), String> {
         return Err("A scrolling capture is already running.".into());
     }
     STOP.store(false, Ordering::SeqCst);
+    SKIP_TEXT.store(false, Ordering::SeqCst);
     let app = app.clone();
     std::thread::spawn(move || {
         /* Give the mouse back however the run ends, even on a panic. */
@@ -448,7 +457,7 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     platform::unlock_pointer();
     frame::hide(app);
     quick_save::set_avoid(app, None);
-    quick_save::show_scroll_saving(app, writer.pages, &last, &note, "Saving…");
+    quick_save::show_scroll_saving(app, writer.pages, &last, &note, "Saving…", false);
 
     let mut saved = Vec::new();
     if keep_pages {
@@ -459,19 +468,31 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
         });
     }
     let pages = writer.pages;
-    let (files, text) = stitcher.finish(&last, &mut |stage| {
-        quick_save::show_scroll_saving(app, pages, &last, &note, &stage)
-    })?;
+    let (files, text) = stitcher.finish(
+        &last,
+        &mut |stage, skippable| {
+            quick_save::show_scroll_saving(app, pages, &last, &note, &stage, skippable)
+        },
+        &|| SKIP_TEXT.load(Ordering::SeqCst),
+    )?;
     match files.len() {
         0 => {}
         1 => saved.push("a long image".to_string()),
         n => saved.push(format!("a long image in {n} parts")),
     }
-    if let Some(text) = text {
+    /* Skipped before anything was read: there is no text to save. */
+    if let Some(text) = text.filter(|t| t.whole || !t.empty) {
         let path = writer.dir.join("Text.txt");
-        std::fs::write(&path, text)
+        std::fs::write(&path, text.text)
             .map_err(|err| format!("Could not write {}: {err}", path.display()))?;
-        saved.push("the text".to_string());
+        saved.push(
+            if text.whole {
+                "the text"
+            } else {
+                "part of the text"
+            }
+            .to_string(),
+        );
     }
 
     /* Read top to bottom: when scrolling up, the last page is the top. */
@@ -1136,10 +1157,12 @@ mod pipeline_tests {
             };
             stitcher.add(last, next, Some(pane)).unwrap();
         }
-        let (files, text) = stitcher.finish(pages.last().unwrap(), &mut |_| {}).unwrap();
+        let (files, text) = stitcher
+            .finish(pages.last().unwrap(), &mut |_, _| {}, &|| false)
+            .unwrap();
         let image = image::open(&files[0]).unwrap().to_rgba8();
         std::fs::remove_dir_all(dir).unwrap();
-        (image, text.unwrap_or_default())
+        (image, text.map(|t| t.text).unwrap_or_default())
     }
 
     #[test]

@@ -202,6 +202,7 @@ pub fn run() {
             commands::finish_window,
             commands::finish_scroll,
             commands::scroll_stop,
+            commands::scroll_skip_text,
             commands::overlay_pending,
             commands::cancel_area,
             commands::latest_capture,

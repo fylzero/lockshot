@@ -10,6 +10,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     version: "1.3.5",
     date: "November 22, 2026",
     notes: [
+      "While Scrolling Capture reads the text (OCR) after it stops, the Saving notice has a Skip button. Skip stops the reading right away; the pages and the long image are still saved, along with the text read so far.",
       "In the light theme, the logo on the home screen sits on its dark rounded tile, so it no longer shows rough dark edges and pale lettering on the light background.",
     ],
   },

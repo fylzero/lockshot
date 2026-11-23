@@ -25,6 +25,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let unlisten: UnlistenFn | undefined;
 
 async function present(next: SaveToast) {
+  if (!next.skippable) skipping.value = false;
   toast.value = next;
   restartTimer();
   await nextTick();
@@ -54,6 +55,13 @@ function edit() {
 
 function stop() {
   void api.scrollStop();
+}
+
+const skipping = ref(false);
+
+function skipText() {
+  skipping.value = true;
+  void api.scrollSkipText();
 }
 
 function pageCount(n: number | null) {
@@ -100,7 +108,10 @@ onBeforeUnmount(() => {
       <div class="thumb"><canvas ref="thumb" /></div>
       <div class="body">
         <strong>{{ toast.note ?? "Stopped" }} · {{ pageCount(toast.pages) }}</strong>
-        <span class="detail"><span class="saving-dot" />{{ toast.stage ?? "Saving…" }}</span>
+        <span class="detail"><span class="saving-dot" />{{ skipping ? "Skipping the rest of the text…" : (toast.stage ?? "Saving…") }}</span>
+      </div>
+      <div v-if="toast.skippable" class="actions">
+        <button type="button" title="Stop reading the text and keep what was read so far" :disabled="skipping" @click="skipText">Skip</button>
       </div>
     </template>
     <template v-else-if="toast.running">

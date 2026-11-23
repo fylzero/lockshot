@@ -113,6 +113,8 @@ export interface SaveToast {
   saving: boolean;
   /** What it is doing while saving, such as "Stitching the long image…". */
   stage: string | null;
+  /** That can be skipped (reading the text): the toast offers Skip. */
+  skippable: boolean;
   /** Why a Scrolling Capture ended. */
   note: string | null;
   /** What a finished Scrolling Capture saved, such as "Saved 12 pages and a long image". */

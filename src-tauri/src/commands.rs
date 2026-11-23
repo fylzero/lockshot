@@ -213,6 +213,12 @@ pub fn scroll_stop() {
     crate::scrolling::stop();
 }
 
+/// The Skip button on the Saving notice, while the text is read.
+#[tauri::command]
+pub fn scroll_skip_text() {
+    crate::scrolling::skip_text();
+}
+
 #[tauri::command]
 pub fn overlay_pending(app: AppHandle, window: WebviewWindow) -> Option<OverlayStart> {
     capture::overlay_pending(&app, window.label())

@@ -7,12 +7,15 @@
 //! the joined rows rather than the pages means no line is ever cut by the
 //! edge of the scrolling pane. Each line belongs to the chunk that holds its
 //! middle, so a line on a chunk boundary is read whole, once.
+//!
+//! Reading can be skipped while it saves: the reader stops at once, and the
+//! text read so far is kept.
 
 use std::ops::Range;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -100,6 +103,17 @@ struct Job {
     keep: Range<u32>,
 }
 
+/// What the worker shares with the run.
+#[derive(Default)]
+struct Shared {
+    /// Chunks read, to show progress.
+    read: AtomicUsize,
+    /// Reading was skipped: drop what is left.
+    skip: AtomicBool,
+    /// One block of lines per chunk read, in scroll order.
+    blocks: Mutex<Vec<Vec<String>>>,
+}
+
 /// Takes the long image's rows in scroll order and reads them in chunks.
 pub struct Reader {
     /// Rows arrive bottom up and upside down when scrolling up.
@@ -112,38 +126,39 @@ pub struct Reader {
     /// The columns to read: the scrolling pane, leaving out sidebars.
     columns: Option<Range<u32>>,
     jobs: Option<Sender<Job>>,
-    worker: Option<JoinHandle<Vec<Vec<String>>>>,
+    worker: Option<JoinHandle<()>>,
     /// Where chunks wait when too many are in memory; removed at the end.
     spill: PathBuf,
-    /// Chunks sent to the worker, and chunks it has read, to show progress.
+    /// Chunks sent to the worker, to show progress.
     sent: AtomicUsize,
-    read: Arc<AtomicUsize>,
+    shared: Arc<Shared>,
 }
 
 impl Reader {
     pub fn start(up: bool) -> Self {
         let (tx, rx) = channel::<Job>();
-        let read = Arc::new(AtomicUsize::new(0));
-        let counter = read.clone();
+        let shared = Arc::new(Shared::default());
+        let worker_shared = shared.clone();
         let spill = std::env::temp_dir().join(format!("lockshot-text-{}", uuid::Uuid::new_v4()));
         let spill_dir = spill.clone();
         let worker = std::thread::spawn(move || {
-            let blocks = rx
-                .into_iter()
-                .map(|job| {
-                    let block = match job.image.load().and_then(|image| imp::recognize(&image)) {
-                        Ok(found) => lines(found, &job.keep),
-                        Err(err) => {
-                            eprintln!("Could not read text: {err}");
-                            Vec::new()
-                        }
-                    };
-                    counter.fetch_add(1, Ordering::SeqCst);
-                    block
-                })
-                .collect();
+            let shared = worker_shared;
+            for job in rx {
+                if shared.skip.load(Ordering::SeqCst) {
+                    break;
+                }
+                let block = match job.image.load().and_then(|image| imp::recognize(&image)) {
+                    Ok(found) => lines(found, &job.keep),
+                    Err(err) => {
+                        eprintln!("Could not read text: {err}");
+                        Vec::new()
+                    }
+                };
+                shared.blocks.lock().unwrap().push(block);
+                shared.read.fetch_add(1, Ordering::SeqCst);
+            }
+            /* Chunks still waiting on disk go with the folder. */
             let _ = std::fs::remove_dir_all(&spill_dir);
-            blocks
         });
         Self {
             up,
@@ -154,7 +169,7 @@ impl Reader {
             worker: Some(worker),
             spill,
             sent: AtomicUsize::new(0),
-            read,
+            shared,
         }
     }
 
@@ -200,10 +215,16 @@ impl Reader {
         }
     }
 
-    /// Read what is left. One block of lines per chunk, in reading order.
-    /// `progress` hears how many chunks are read out of how many, whenever
-    /// that changes, while it waits.
-    pub fn finish(mut self, mut progress: impl FnMut(usize, usize)) -> Vec<Vec<String>> {
+    /// Read what is left. One block of lines per chunk, in reading order,
+    /// and whether every chunk was read. `progress` hears how many chunks
+    /// are read out of how many, whenever that changes, while it waits.
+    /// Once `skip` says so it stops waiting and keeps what was read: the
+    /// chunk being read then is left to finish on its own and is dropped.
+    pub fn finish(
+        mut self,
+        mut progress: impl FnMut(usize, usize),
+        skip: impl Fn() -> bool,
+    ) -> (Vec<Vec<String>>, bool) {
         if let Some(buffer) = self.buffer.take() {
             let start = if self.started {
                 MARGIN.min(buffer.height())
@@ -215,24 +236,33 @@ impl Reader {
         self.jobs.take();
         let total = self.sent.load(Ordering::SeqCst);
         let mut shown = None;
+        let mut whole = true;
         while self.worker.as_ref().is_some_and(|w| !w.is_finished()) {
-            let read = self.read.load(Ordering::SeqCst);
+            if skip() {
+                self.shared.skip.store(true, Ordering::SeqCst);
+                whole = false;
+                break;
+            }
+            let read = self.shared.read.load(Ordering::SeqCst);
             if shown != Some(read) {
                 progress(read, total);
                 shown = Some(read);
             }
             std::thread::sleep(Duration::from_millis(50));
         }
-        let mut blocks = self
-            .worker
-            .take()
-            .and_then(|worker| worker.join().ok())
-            .unwrap_or_default();
+        if whole {
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+        let mut blocks = std::mem::take(&mut *self.shared.blocks.lock().unwrap());
+        /* Skipped: the chunks read are the first ones, in scroll order. */
+        whole = whole || blocks.len() >= total;
         /* Chunks were read in scroll order: bottom up when scrolling up. */
         if self.up {
             blocks.reverse();
         }
-        blocks
+        (blocks, whole)
     }
 
     /// Read `rows` of `buffer`, keeping text in `keep` (both in scroll order).
@@ -258,7 +288,7 @@ impl Reader {
             keep = (height - keep.end)..(height - keep.start);
         }
         let sent = self.sent.load(Ordering::SeqCst);
-        let waiting = sent.saturating_sub(self.read.load(Ordering::SeqCst));
+        let waiting = sent.saturating_sub(self.shared.read.load(Ordering::SeqCst));
         let image = if waiting < IN_MEMORY {
             Chunk::Memory(image)
         } else {
@@ -470,6 +500,7 @@ mod vision_tests {
         let image = image::open(path).unwrap().to_rgba8();
         let mut reader = super::Reader::start(false);
         reader.push(&image);
-        eprintln!("{}", super::text(&reader.finish(|_, _| {})));
+        let (blocks, _) = reader.finish(|_, _| {}, || false);
+        eprintln!("{}", super::text(&blocks));
     }
 }

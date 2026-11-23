@@ -28,6 +28,7 @@ export const api = {
   finishScroll: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
     invoke<void>("finish_scroll", { session, rect }),
   scrollStop: () => invoke<void>("scroll_stop"),
+  scrollSkipText: () => invoke<void>("scroll_skip_text"),
   overlayPending: () => invoke<OverlayStart | null>("overlay_pending"),
   cancelArea: () => invoke<void>("cancel_area"),
   latestCapture: () => invoke<CaptureReady | null>("latest_capture"),

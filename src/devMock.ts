@@ -43,7 +43,7 @@ function sampleImage() {
 
 /** #toast, #toast-error, #toast-scrolling (in progress; #toast-scrolling-unlocked on Linux, #toast-scrolling-saving once stopped) or #toast-scrolled (done). */
 function sampleToast(kind: string) {
-  const none = { pages: null, running: false, pointerLocked: false, saving: false, stage: null, note: null, title: null };
+  const none = { pages: null, running: false, pointerLocked: false, saving: false, stage: null, skippable: false, note: null, title: null };
   if (kind.includes("error")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail: null, copied: false,
       error: "Could not write the image: Permission denied (os error 13)", ...none };
@@ -64,12 +64,12 @@ function sampleToast(kind: string) {
   if (kind.includes("scrolling")) {
     return { id: "t1", capture: null, path: null, fileName: null, thumbnail, copied: false, error: null,
       pages: 12, running: true, pointerLocked: !kind.includes("unlocked"),
-      saving: kind.includes("saving"), stage: kind.includes("saving") ? "Reading the text (OCR), part 2 of 5…" : null, note: kind.includes("saving") ? "Stopped" : null, title: null };
+      saving: kind.includes("saving"), stage: kind.includes("saving") ? "Reading the text (OCR), part 2 of 5…" : null, skippable: kind.includes("saving"), note: kind.includes("saving") ? "Stopped" : null, title: null };
   }
   if (kind.includes("scrolled")) {
     return { id: "t1", capture: null, path: "/Users/demo/Pictures/Screenshot-2026-11-20-18.04.29 Scrolling",
       fileName: "Screenshot-2026-11-20-18.04.29 Scrolling", thumbnail, copied: false, error: null,
-      pages: 37, running: false, pointerLocked: false, saving: false, stage: null, note: "Reached the end", title: "Saved 37 pages, a long image and the text" };
+      pages: 37, running: false, pointerLocked: false, saving: false, stage: null, skippable: false, note: "Reached the end", title: "Saved 37 pages, a long image and the text" };
   }
   return {
     ...none,

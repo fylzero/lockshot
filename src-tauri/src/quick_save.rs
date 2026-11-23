@@ -60,6 +60,8 @@ pub struct Toast {
     saving: bool,
     /// What it is doing while saving, such as "Stitching the long image…".
     stage: Option<String>,
+    /// That can be skipped: reading the text. The toast offers Skip.
+    skippable: bool,
     /// Why a Scrolling Capture ended, such as "Reached the end".
     note: Option<String>,
     /// What a finished Scrolling Capture saved, such as "Saved 12 pages
@@ -413,13 +415,14 @@ pub fn show_scroll_progress(app: &AppHandle, pages: u32, latest: &RgbaImage, poi
 }
 
 /// Scrolling Capture stopped and is writing the long image and text;
-/// `stage` says which.
+/// `stage` says which, and `skippable` whether it offers Skip.
 pub fn show_scroll_saving(
     app: &AppHandle,
     pages: u32,
     latest: &RgbaImage,
     note: &str,
     stage: &str,
+    skippable: bool,
 ) {
     show_at(
         app,
@@ -430,6 +433,7 @@ pub fn show_scroll_saving(
             running: true,
             saving: true,
             stage: Some(stage.to_string()),
+            skippable,
             note: Some(note.to_string()),
             ..Default::default()
         },
