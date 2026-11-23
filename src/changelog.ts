@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.4.1",
+    date: "November 23, 2026",
+    notes: [
+      "On macOS the window's close, minimize and zoom buttons sit in the tab bar, so there's no separate title bar strip above the tabs. Drag the window by any empty part of the tab bar, or double-click it to zoom.",
+    ],
+  },
+  {
     version: "1.4.0",
     date: "November 23, 2026",
     notes: [

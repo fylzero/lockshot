@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
@@ -8,6 +9,7 @@ import { formatAccelerator } from "../hotkeys";
 import { useTabs } from "../tabs";
 import { useUpdater } from "../composables/useUpdater";
 import type { CaptureMode } from "../types";
+import { isMac } from "../platform";
 
 const route = useRoute();
 const router = useRouter();
@@ -15,6 +17,31 @@ const { tabs, active, activate, close } = useTabs(router, route);
 const { updateReady, availableVersion, showPrompt } = useUpdater();
 
 const tabList = ref<HTMLElement | null>(null);
+
+/* On macOS the window buttons sit in the tab bar's left corner, so the bar
+   leaves room for them, except in full screen, where macOS hides them. */
+const fullscreen = ref(false);
+let unlistenResize: (() => void) | undefined;
+
+async function syncFullscreen() {
+  try {
+    fullscreen.value = await getCurrentWindow().isFullscreen();
+  } catch {
+    fullscreen.value = false;
+  }
+}
+
+onMounted(async () => {
+  if (!isMac) return;
+  await syncFullscreen();
+  try {
+    unlistenResize = await getCurrentWindow().onResized(syncFullscreen);
+  } catch {
+    /* Not running in Tauri (browser dev mock). */
+  }
+});
+
+onBeforeUnmount(() => unlistenResize?.());
 
 /* A vertical wheel or swipe scrolls the tabs sideways. */
 function onWheel(event: WheelEvent) {
@@ -51,8 +78,14 @@ function hint(label: string, accelerator?: string) {
 </script>
 
 <template>
-  <div class="tab-bar" role="tablist" aria-label="Open views">
-    <div ref="tabList" class="tab-list" @wheel="onWheel">
+  <div
+    class="tab-bar"
+    :class="{ 'traffic-lights': isMac && !fullscreen }"
+    role="tablist"
+    aria-label="Open views"
+    data-tauri-drag-region
+  >
+    <div ref="tabList" class="tab-list" data-tauri-drag-region @wheel="onWheel">
       <div
         class="tab pinned"
         :class="{ active: active === 'home' }"

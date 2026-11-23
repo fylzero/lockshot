@@ -2041,6 +2041,14 @@ button.tab-tool.update:hover:not(:disabled) {
   background: var(--bg);
 }
 
+/* macOS: room for the window buttons, which sit inline at the left of the tab bar,
+   with a divider after them. The gap is part of the bar, so it drags the window. */
+.tab-bar.traffic-lights::before {
+  content: "";
+  flex: 0 0 84px;
+  border-right: 1px solid var(--border);
+}
+
 /* Tabs scrolled into view land beside Home, not under it. */
 .tab-list {
   scroll-padding-inline-start: 42px;
