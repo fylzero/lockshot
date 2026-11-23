@@ -7,18 +7,15 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
-    version: "1.3.6",
+    version: "1.4.0",
     date: "November 23, 2026",
     notes: [
-      "Numbered steps can point at things. Click and drag with the Numbered step tool and the stamp gets a cone that tapers to where you let go. A plain click still drops a plain stamp. Hold Shift to keep the cone at 45° angles, and drag the dot on a selected stamp's tip to point it somewhere else.",
-      "The editor opens where you are. Take a screenshot on another desktop (Space) and Lockshot comes to you, instead of switching you back to the desktop it was last open on. It also opens on the screen you captured on, rather than the one it was last on.",
-      "New setting: Open the editor on. Pick a screen in Settings › General to always open the editor there. If that screen is unplugged, the editor opens on the screen you captured on.",
-      "The window sizes itself to each capture or opened image, so it shows at 1:1 with no wasted space. A capture too big for the screen fills the screen and is shrunk to fit. Turn this off in Settings › General with Resize the window to each capture.",
-      "New setting: Always open captures at 1:1. Turn it on in Settings › General to see every capture at its actual pixels, starting at the top left, even one too big for the window.",
-      "The 1:1 button in the editor lights up while you're viewing at 1:1, the way Fit does.",
-      "Scrolling Capture can take a window. Start it and hover: the window under the pointer lights up, and clicking the part of it that scrolls (a chat thread, a page) captures that window and scrolls it right where you clicked, so a sidebar or another pane never scrolls instead. Dragging over an area works as before.",
-      "Scrolling Capture brings the window it scrolls to the front when it starts, so a window partly covering it, or Lockshot's own window, no longer ends up in the pages. On macOS and Windows the pages are read straight from that window, so anything that pops up in front of it during the run stays out of them too, and if another app covers the spot being scrolled, the window is brought back to the front.",
-      "Scrolling Capture pages no longer show where the mouse was. The pointer only visits the area to scroll, then waits on the white border around it while each page is taken, so no highlighted rows, hover buttons or tooltips get into the pages or the long image.",
+      "Drag with the Numbered step tool to add a cone pointing at something. Drag the dot at its tip to re-aim it; hold Shift for 45° angles.",
+      "The editor opens on the desktop (Space) and screen you captured on. To always use one screen, pick it in Settings › General › Open the editor on.",
+      "The window sizes itself to each capture so it shows at 1:1, and fits captures too big for the screen. New settings in General turn this off or always open at 1:1.",
+      "Scrolling Capture can pick a window: hover to highlight it, then click the part that scrolls.",
+      "Scrolling Capture keeps other windows and the mouse pointer out of the pages.",
+      "Area capture with more than one display no longer shows one screen's image squished onto another.",
     ],
   },
   {

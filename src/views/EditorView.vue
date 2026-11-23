@@ -184,18 +184,12 @@ watch(
         }
         image.value?.close();
         image.value = bitmap;
+        firstShow = true;
         await nextTick();
-        if (settings.value?.resizeWindowToCapture && props.active) await sizeWindowToImage();
-        if (settings.value?.alwaysActualSize) {
-          setZoom(1);
-          /* Start at the top left, where most screenshots begin. */
-          await nextTick();
-          stage.value?.scrollTo(0, 0);
-        } else {
-          fitMode.value = true;
-          fit();
-        }
-        draw();
+        /* A new tab's image often loads before the tab is switched to; it
+        opens when the tab shows (the active watcher). */
+        if (props.active) await openImage();
+        else draw();
         if (settings.value?.copyOnCapture) void copy(true);
       })
       .catch(() => {
@@ -204,6 +198,31 @@ watch(
   },
   { immediate: true },
 );
+
+/** The image has not been shown yet: size the window to it when it first is. */
+let firstShow = false;
+
+/**
+ * Show a newly loaded image: at 1:1 when it fits on the screen, sizing the
+ * window to it, or fitted when it is too big for the screen.
+ */
+async function openImage() {
+  if (!firstShow) return;
+  firstShow = false;
+  if (settings.value?.resizeWindowToCapture) await sizeWindowToImage();
+  if (settings.value?.alwaysActualSize) {
+    setZoom(1);
+    /* Start at the top left, where most screenshots begin. */
+    await nextTick();
+    stage.value?.scrollTo(0, 0);
+  } else {
+    /* Fit never zooms past 1:1. Until the resize lands it may measure the
+    old window; the resize observer fits again once it does. */
+    fitMode.value = true;
+    fit();
+  }
+  draw();
+}
 
 function reset() {
   shapes.value = [];
@@ -306,15 +325,45 @@ const MIN_WINDOW = { width: 760, height: 520 };
  * is shrunk by Fit.
  */
 async function sizeWindowToImage() {
-  if (!stage.value || !view.value.w) return;
-  const chromeW = window.innerWidth - stage.value.clientWidth;
-  const chromeH = window.innerHeight - stage.value.clientHeight;
-  /* fit() keeps 48px clear around the image; 2 more so no scrollbar appears. */
-  const pad = 50;
-  const width = Math.max(MIN_WINDOW.width, Math.ceil(chromeW + view.value.w / dpr + pad));
-  const height = Math.max(MIN_WINDOW.height, Math.ceil(chromeH + view.value.h / dpr + pad));
-  if (width === window.innerWidth && height === window.innerHeight) return;
-  await api.sizeMainWindow(width, height).catch(() => {});
+  /*
+   * The toolbar wraps onto more rows in a narrow window, so the space around
+   * the stage measured before a resize can be wrong after it. Measure again
+   * once the window has its new size, and correct it (up to twice more).
+   */
+  for (let pass = 0; pass < 3; pass++) {
+    if (!stage.value || !view.value.w) return;
+    const chromeW = window.innerWidth - stage.value.clientWidth;
+    const chromeH = window.innerHeight - stage.value.clientHeight;
+    /* fit() keeps 48px clear around the image; 2 more so no scrollbar appears. */
+    const pad = 50;
+    const width = Math.max(MIN_WINDOW.width, Math.ceil(chromeW + view.value.w / dpr + pad));
+    const height = Math.max(MIN_WINDOW.height, Math.ceil(chromeH + view.value.h / dpr + pad));
+    if (width === window.innerWidth && height === window.innerHeight) return;
+    /* After the first pass, only grow to make room; the screen may not allow more. */
+    if (pass > 0 && width <= window.innerWidth && height <= window.innerHeight) return;
+    const before = [window.innerWidth, window.innerHeight];
+    await api.sizeMainWindow(width, height).catch(() => {});
+    await windowResized(before);
+    /* The screen would not give it any more room: Fit takes over. */
+    if (window.innerWidth === before[0] && window.innerHeight === before[1]) return;
+  }
+}
+
+/** Wait for the window to change from `before` and lay out, or give up after a moment. */
+function windowResized(before: number[]) {
+  return new Promise<void>((resolve) => {
+    const started = performance.now();
+    const check = () => {
+      const changed = window.innerWidth !== before[0] || window.innerHeight !== before[1];
+      if (changed || performance.now() - started > 400) {
+        /* One more frame so the toolbar has wrapped at the new width. */
+        requestAnimationFrame(() => resolve());
+      } else {
+        requestAnimationFrame(check);
+      }
+    };
+    requestAnimationFrame(check);
+  });
 }
 
 function setZoom(next: number) {
@@ -1063,6 +1112,7 @@ watch(
   async (active) => {
     if (!active) return;
     await nextTick();
+    if (firstShow) return openImage();
     if (fitMode.value) fit();
     draw();
   },
@@ -1378,8 +1428,9 @@ onBeforeUnmount(() => {
         <button title="Zoom out" @click="setZoom(zoom / 1.25)">−</button>
         <span>{{ Math.round(zoom * 100) }}%</span>
         <button title="Zoom in" @click="setZoom(zoom * 1.25)">+</button>
-        <button :class="{ primary: fitMode }" :title="`Fit (${modKey}0)`" @click="fitMode = true; fit()">Fit</button>
-        <button :class="{ primary: !fitMode && zoom === 1 }" title="Actual pixels" @click="setZoom(1)">1:1</button>
+        <!-- Fit never zooms past 1:1, so an image that fits shows as 1:1. -->
+        <button :class="{ primary: fitMode && zoom < 1 }" :title="`Fit (${modKey}0)`" @click="fitMode = true; fit()">Fit</button>
+        <button :class="{ primary: zoom === 1 }" title="Actual pixels" @click="setZoom(1)">1:1</button>
         <span class="zoom-size" title="Image size in pixels, after any crop">{{ outputSize.width }} × {{ outputSize.height }}</span>
       </div>
       <FileBadge

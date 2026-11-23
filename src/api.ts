@@ -34,6 +34,7 @@ export const api = {
   scrollStop: () => invoke<void>("scroll_stop"),
   scrollSkipText: () => invoke<void>("scroll_skip_text"),
   overlayPending: () => invoke<OverlayStart | null>("overlay_pending"),
+  overlayRefit: () => invoke<void>("overlay_refit"),
   cancelArea: () => invoke<void>("cancel_area"),
   latestCapture: () => invoke<CaptureReady | null>("latest_capture"),
   releaseCapture: (id: string) => invoke<void>("release_capture", { id }),

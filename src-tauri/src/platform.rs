@@ -434,14 +434,25 @@ pub fn cursor_point(app: &tauri::AppHandle) -> Option<(i32, i32)> {
 }
 
 /**
- * Lift a window above the menu bar and Dock. Floating windows (what
- * always-on-top gives) sit below the menu bar, so the overlay would leave a
- * strip of live screen at the top that could not be selected.
+ * Put a capture overlay exactly over its display and lift it above the menu
+ * bar and Dock. Floating windows (what always-on-top gives) sit below the
+ * menu bar, so the overlay would leave a strip of live screen at the top that
+ * could not be selected.
+ *
+ * The frame is set in one go from the display's own NSScreen. Moving and
+ * then resizing (what Tauri's set_position and set_size do) keeps the
+ * bottom-left corner fixed during the resize, so an overlay that changed to
+ * a display of another height ended up shifted, part on the wrong screen
+ * (issue #31). `bounds` (points, top-left origin) is only used if no
+ * NSScreen matches the display.
  */
 #[cfg(target_os = "macos")]
-pub fn raise_overlay(window: &tauri::WebviewWindow) {
+pub fn place_overlay(window: &tauri::WebviewWindow, display_id: u32, bounds: (i32, i32, u32, u32)) {
     use objc2::msg_send;
     use objc2::runtime::AnyObject;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSScreen;
+    use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, NSString};
 
     /// NSScreenSaverWindowLevel
     const LEVEL: isize = 1000;
@@ -458,14 +469,39 @@ pub fn raise_overlay(window: &tauri::WebviewWindow) {
         if ns_window.is_null() {
             return;
         }
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let screens = NSScreen::screens(mtm);
+        let key = NSString::from_str("NSScreenNumber");
+        let matched = screens.iter().find(|screen| {
+            screen
+                .deviceDescription()
+                .objectForKey(&key)
+                .and_then(|number| number.downcast::<NSNumber>().ok())
+                .is_some_and(|number| number.unsignedIntValue() == display_id)
+        });
+        let frame = match matched {
+            Some(screen) => screen.frame(),
+            None => {
+                /* AppKit puts the origin at the bottom-left of the first screen. */
+                let Some(primary) = screens.iter().next() else {
+                    return;
+                };
+                let (x, y, width, height) = bounds;
+                let flip = primary.frame().size.height;
+                NSRect::new(
+                    NSPoint::new(x as f64, flip - y as f64 - height as f64),
+                    NSSize::new(width as f64, height as f64),
+                )
+            }
+        };
         unsafe {
+            let _: () = msg_send![ns_window, setFrame: frame, display: false];
             let _: () = msg_send![ns_window, setLevel: LEVEL];
         }
     });
 }
-
-#[cfg(not(target_os = "macos"))]
-pub fn raise_overlay(_window: &tauri::WebviewWindow) {}
 
 /**
  * Let the main window follow the user between Spaces: when it is shown it

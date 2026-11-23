@@ -8,7 +8,7 @@ import type { OverlayStart, WindowTarget } from "./types";
 
 /*
  * One of these covers each display during an area or window capture, showing
- * the frozen screenshot of that display. The window ("overlay-<index>") is
+ * the frozen screenshot of that display. The window ("overlay-<display id>") is
  * made once, kept hidden between captures, and told about each new capture
  * with an "overlay-start" event, so it can appear without loading a page
  * first. In window mode it highlights the window under the pointer instead
@@ -97,6 +97,36 @@ const labelStyle = computed(() => {
   };
 });
 
+/** The window is the shape of the display it shows, give or take rounding. */
+function fits(next: OverlayStart) {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  if (!W || !H) return true;
+  return Math.abs(W / H - next.width / next.height) < 0.01;
+}
+
+/**
+ * The frozen image is stretched to fill the window, so a window that came
+ * out the wrong shape would show the display squished (issue #31). Ask for
+ * it to be put back over its display, and wait for the resize.
+ */
+async function ensureFit(next: OverlayStart) {
+  if (fits(next)) return;
+  console.warn(
+    `[overlay ${win.label}] page ${window.innerWidth}x${window.innerHeight} does not match the ${next.width}x${next.height} display; placing it again`,
+  );
+  await api.overlayRefit().catch(() => {});
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      window.removeEventListener("resize", done);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 300);
+    window.addEventListener("resize", done);
+  });
+}
+
 /** Show a new capture: draw its frozen display, then appear. */
 async function begin(next: OverlayStart) {
   const started = performance.now();
@@ -121,6 +151,8 @@ async function begin(next: OverlayStart) {
     return;
   }
   naturalWidth.value = next.width;
+  await ensureFit(next);
+  if (session.value !== next.session) return;
   loaded.value = true;
   await win.show();
   if (import.meta.env.DEV) {

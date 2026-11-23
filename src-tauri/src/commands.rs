@@ -226,6 +226,11 @@ pub fn overlay_pending(app: AppHandle, window: WebviewWindow) -> Option<OverlayS
 }
 
 #[tauri::command]
+pub fn overlay_refit(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    capture::refit_overlay(&app, window.label())
+}
+
+#[tauri::command]
 pub fn cancel_area(app: AppHandle) {
     capture::cancel_area(&app);
 }

@@ -36,6 +36,11 @@ struct Session {
 }
 
 impl Session {
+    /// The shot of a display, by the display id in its overlay's label.
+    fn index_of(&self, display: u32) -> Option<usize> {
+        self.shots.iter().position(|shot| shot.bounds.id == display)
+    }
+
     fn start(&self, index: usize) -> Option<OverlayStart> {
         let shot = self.shots.get(index)?;
         Some(OverlayStart {
@@ -123,6 +128,8 @@ pub struct Rect {
 
 #[derive(Clone, Copy)]
 struct Bounds {
+    /// The system's id for the display, which names its overlay window.
+    id: u32,
     x: i32,
     y: i32,
     width: u32,
@@ -131,6 +138,7 @@ struct Bounds {
 
 fn monitor_bounds(monitor: &Monitor) -> Option<Bounds> {
     Some(Bounds {
+        id: monitor.id().ok()?,
         x: monitor.x().ok()?,
         y: monitor.y().ok()?,
         width: monitor.width().ok()?,
@@ -244,12 +252,19 @@ pub fn open_file(app: &AppHandle, path: &std::path::Path) -> Result<(), String> 
     Ok(())
 }
 
-fn overlay_label(index: usize) -> String {
-    format!("{OVERLAY_PREFIX}{index}")
+/**
+ * Each display keeps its own overlay window, named after the display rather
+ * than its place in the list. The list can come back in another order (a
+ * different main display, a lid opened or closed), and an overlay that had
+ * to move to a display of another size or density could end up stretched
+ * over the wrong screen (issue #31).
+ */
+fn overlay_label(display: u32) -> String {
+    format!("{OVERLAY_PREFIX}{display}")
 }
 
-/// The display index an overlay window covers, from "overlay-<index>".
-pub fn parse_overlay_label(label: &str) -> Option<usize> {
+/// The display id an overlay window covers, from "overlay-<display id>".
+pub fn parse_overlay_label(label: &str) -> Option<u32> {
     label.strip_prefix(OVERLAY_PREFIX)?.parse().ok()
 }
 
@@ -266,13 +281,8 @@ fn lap(start: Instant, stage: &str) {
  * ahead of time at launch, because building a webview and loading the page
  * is most of what made area capture slow to appear.
  */
-fn place_overlay(
-    app: &AppHandle,
-    index: usize,
-    bounds: &Bounds,
-    focus: bool,
-) -> Result<WebviewWindow, String> {
-    let label = overlay_label(index);
+fn place_overlay(app: &AppHandle, bounds: &Bounds, focus: bool) -> Result<WebviewWindow, String> {
+    let label = overlay_label(bounds.id);
     let window = match app.get_webview_window(&label) {
         Some(window) => window,
         None => {
@@ -304,18 +314,23 @@ fn place_overlay(
         }
     };
     /*
-     * xcap reports bounds in points on macOS and physical pixels elsewhere,
-     * which is what each platform's window placement expects. Displays can
-     * be rearranged between captures, so this runs every time.
+     * Displays can be rearranged between captures, so this runs every time.
+     * macOS sets the whole frame from the display's NSScreen at once. xcap
+     * reports bounds in physical pixels elsewhere, which is what window
+     * placement there expects; the size goes last so a change of display
+     * density on the way cannot leave the window scaled.
      */
-    if cfg!(target_os = "macos") {
-        let _ = window.set_position(tauri::LogicalPosition::new(bounds.x, bounds.y));
-        let _ = window.set_size(tauri::LogicalSize::new(bounds.width, bounds.height));
-    } else {
+    #[cfg(target_os = "macos")]
+    platform::place_overlay(
+        &window,
+        bounds.id,
+        (bounds.x, bounds.y, bounds.width, bounds.height),
+    );
+    #[cfg(not(target_os = "macos"))]
+    {
         let _ = window.set_position(tauri::PhysicalPosition::new(bounds.x, bounds.y));
         let _ = window.set_size(tauri::PhysicalSize::new(bounds.width, bounds.height));
     }
-    platform::raise_overlay(&window);
     Ok(window)
 }
 
@@ -325,9 +340,9 @@ pub fn prewarm(app: &AppHandle) {
     let Ok(monitors) = Monitor::all() else {
         return;
     };
-    for (index, monitor) in monitors.iter().enumerate() {
+    for monitor in &monitors {
         if let Some(bounds) = monitor_bounds(monitor) {
-            let _ = place_overlay(app, index, &bounds, false);
+            let _ = place_overlay(app, &bounds, false);
         }
     }
 }
@@ -427,15 +442,15 @@ fn start_overlays(app: &AppHandle, mode: OverlayMode) -> Result<(), String> {
         .collect();
     *app.state::<CaptureState>().session.lock().unwrap() = Some(session);
 
-    let count = placements.len();
+    let displays: Vec<u32> = placements.iter().map(|(bounds, _)| bounds.id).collect();
     for ((bounds, focus), overlay) in placements.into_iter().zip(starts) {
-        place_overlay(app, overlay.index, &bounds, focus)?;
+        place_overlay(app, &bounds, focus)?;
         /* A freshly created page asks with overlay_pending instead. */
-        let _ = app.emit_to(overlay_label(overlay.index), "overlay-start", overlay);
+        let _ = app.emit_to(overlay_label(bounds.id), "overlay-start", overlay);
     }
     /* Displays that went away keep their overlay hidden. */
     for (label, window) in app.webview_windows() {
-        if parse_overlay_label(&label).is_some_and(|index| index >= count) {
+        if parse_overlay_label(&label).is_some_and(|display| !displays.contains(&display)) {
             let _ = window.hide();
         }
     }
@@ -456,13 +471,28 @@ pub fn cancel_area(app: &AppHandle) {
     close_overlays(app);
 }
 
+/// Put an overlay back over its display, for a page that found its window
+/// was not the shape of the display it shows.
+pub fn refit_overlay(app: &AppHandle, label: &str) -> Result<(), String> {
+    let display = parse_overlay_label(label).ok_or("That capture overlay is not recognised.")?;
+    let bounds = {
+        let state = app.state::<CaptureState>();
+        let session = state.session.lock().unwrap();
+        let session = session.as_ref().ok_or("This capture has already finished.")?;
+        let index = session.index_of(display).ok_or("That display is no longer available.")?;
+        session.shots[index].bounds
+    };
+    place_overlay(app, &bounds, false).map(|_| ())
+}
+
 /// What an overlay page should show right now, for a page that loaded after
 /// the capture started and missed the event.
 pub fn overlay_pending(app: &AppHandle, label: &str) -> Option<OverlayStart> {
-    let index = parse_overlay_label(label)?;
+    let display = parse_overlay_label(label)?;
     let state = app.state::<CaptureState>();
     let session = state.session.lock().unwrap();
-    session.as_ref()?.start(index)
+    let session = session.as_ref()?;
+    session.start(session.index_of(display)?)
 }
 
 /**
@@ -489,7 +519,7 @@ pub fn finish_area(
 
 /// End the session and hand back the frozen display the overlay covered.
 fn take_shot(app: &AppHandle, label: &str, session_id: &str) -> Result<MonitorShot, String> {
-    let index = parse_overlay_label(label).ok_or("That capture overlay is not recognised.")?;
+    let display = parse_overlay_label(label).ok_or("That capture overlay is not recognised.")?;
     let state = app.state::<CaptureState>();
     let mut session = state.session.lock().unwrap();
     if session.as_ref().is_none_or(|s| s.id != session_id) {
@@ -499,7 +529,7 @@ fn take_shot(app: &AppHandle, label: &str, session_id: &str) -> Result<MonitorSh
     current
         .shots
         .into_iter()
-        .nth(index)
+        .find(|shot| shot.bounds.id == display)
         .ok_or_else(|| "That display is no longer available.".into())
 }
 
