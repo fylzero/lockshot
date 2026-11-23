@@ -79,6 +79,176 @@ mod mac {
     }
 }
 
+/**
+ * macOS: keep the mouse from moving the pointer, clicking or scrolling
+ * while Scrolling Capture runs, whichever app is active. Unhooking the
+ * pointer from the mouse (CGAssociateMouseAndMouseCursorPosition) only
+ * lasts while Lockshot is the active app, and the run makes the app it
+ * scrolls active. So an event tap drops the mouse's own events for the run
+ * and puts the pointer back where Lockshot holds it, letting through the
+ * moves and scrolls Lockshot posts itself through enigo. The tap runs on its own thread;
+ * macOS turns it off by itself if Lockshot stops answering, and removes it
+ * when Lockshot quits, so the mouse can never stay stuck.
+ */
+#[cfg(target_os = "macos")]
+mod mouse_block {
+    use std::ffi::c_void;
+    use std::sync::atomic::{AtomicBool, AtomicI64, AtomicPtr, Ordering};
+    use std::sync::Mutex;
+
+    type Ref = *const c_void;
+    type Callback = extern "C" fn(Ref, u32, Ref, *mut c_void) -> Ref;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventTapCreate(
+            tap: u32,
+            place: u32,
+            options: u32,
+            events: u64,
+            callback: Callback,
+            info: *mut c_void,
+        ) -> Ref;
+        fn CGEventTapEnable(tap: Ref, enable: bool);
+        fn CGEventGetIntegerValueField(event: Ref, field: u32) -> i64;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        static kCFRunLoopCommonModes: Ref;
+        fn CFMachPortCreateRunLoopSource(allocator: Ref, port: Ref, order: isize) -> Ref;
+        fn CFMachPortInvalidate(port: Ref);
+        fn CFRunLoopGetCurrent() -> Ref;
+        fn CFRunLoopAddSource(run_loop: Ref, source: Ref, mode: Ref);
+        fn CFRunLoopRun();
+        fn CFRunLoopStop(run_loop: Ref);
+    }
+
+    /// kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault.
+    const HID_TAP: u32 = 0;
+    const HEAD: u32 = 0;
+    const FILTER: u32 = 0;
+    /// kCGEventSourceUserData: enigo marks every event it posts with
+    /// enigo::EVENT_MARKER here, which is how Lockshot's own get through.
+    const USER_DATA: u32 = 42;
+    /// The mouse's buttons, moves, drags and scroll wheel.
+    const BUTTONS: [u32; 6] = [1, 2, 3, 4, 25, 26];
+    const MOVES: [u32; 4] = [5, 6, 7, 27];
+    const SCROLL: u32 = 22;
+    /// Sent when macOS turned the tap off, for being slow or for input.
+    const DISABLED_BY_TIMEOUT: u32 = 0xFFFF_FFFE;
+    const DISABLED_BY_INPUT: u32 = 0xFFFF_FFFF;
+
+    static ON: AtomicBool = AtomicBool::new(false);
+    /// Where the pointer is held, as x and y in points packed into one value.
+    static POINT: AtomicI64 = AtomicI64::new(0);
+    static TAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+    static RUN_LOOP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+    /// Start and stop one at a time.
+    static GUARD: Mutex<()> = Mutex::new(());
+
+    fn pack(x: i32, y: i32) -> i64 {
+        ((x as i64) << 32) | (y as u32 as i64)
+    }
+
+    fn held() -> super::mac::CGPoint {
+        let v = POINT.load(Ordering::SeqCst);
+        super::mac::CGPoint {
+            x: (v >> 32) as i32 as f64,
+            y: v as i32 as f64,
+        }
+    }
+
+    extern "C" fn filter(_proxy: Ref, kind: u32, event: Ref, _info: *mut c_void) -> Ref {
+        if kind == DISABLED_BY_TIMEOUT || kind == DISABLED_BY_INPUT {
+            let tap = TAP.load(Ordering::SeqCst);
+            if ON.load(Ordering::SeqCst) && !tap.is_null() {
+                unsafe { CGEventTapEnable(tap, true) };
+            }
+            return event;
+        }
+        if !ON.load(Ordering::SeqCst)
+            || unsafe { CGEventGetIntegerValueField(event, USER_DATA) }
+                == enigo::EVENT_MARKER as i64
+        {
+            return event;
+        }
+        if MOVES.contains(&kind) {
+            unsafe { super::mac::CGWarpMouseCursorPosition(held()) };
+            return std::ptr::null();
+        }
+        if BUTTONS.contains(&kind) || kind == SCROLL {
+            return std::ptr::null();
+        }
+        event
+    }
+
+    /// Hold the pointer at `(x, y)`, starting the tap if it is not running.
+    /// Returns whether the tap is running.
+    pub fn start(x: i32, y: i32) -> bool {
+        POINT.store(pack(x, y), Ordering::SeqCst);
+        let _guard = GUARD.lock().unwrap();
+        if ON.load(Ordering::SeqCst) {
+            return true;
+        }
+        let mask = BUTTONS
+            .iter()
+            .chain(&MOVES)
+            .chain(&[SCROLL])
+            .fold(0u64, |mask, kind| mask | (1 << kind));
+        let tap =
+            unsafe { CGEventTapCreate(HID_TAP, HEAD, FILTER, mask, filter, std::ptr::null_mut()) };
+        if tap.is_null() {
+            return false;
+        }
+        TAP.store(tap as *mut c_void, Ordering::SeqCst);
+        ON.store(true, Ordering::SeqCst);
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let port = tap as usize;
+        std::thread::spawn(move || unsafe {
+            let tap = port as Ref;
+            let source = CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
+            let run_loop = CFRunLoopGetCurrent();
+            CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes);
+            CGEventTapEnable(tap, true);
+            RUN_LOOP.store(run_loop as *mut c_void, Ordering::SeqCst);
+            let _ = ready_tx.send(());
+            CFRunLoopRun();
+            CGEventTapEnable(tap, false);
+            CFMachPortInvalidate(tap);
+            super::mac::CFRelease(source);
+            super::mac::CFRelease(tap);
+        });
+        /* Wait for the run loop, so a stop right after this finds it. */
+        let _ = ready_rx.recv_timeout(std::time::Duration::from_secs(1));
+        true
+    }
+
+    /// Give the mouse back. Safe to call when not running.
+    pub fn stop() {
+        let _guard = GUARD.lock().unwrap();
+        if !ON.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        TAP.store(std::ptr::null_mut(), Ordering::SeqCst);
+        let run_loop = RUN_LOOP.swap(std::ptr::null_mut(), Ordering::SeqCst);
+        if !run_loop.is_null() {
+            unsafe { CFRunLoopStop(run_loop) };
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn packs_negative_points() {
+            for (x, y) in [(0, 0), (-1440, 900), (3000, -25)] {
+                super::POINT.store(super::pack(x, y), std::sync::atomic::Ordering::SeqCst);
+                let p = super::held();
+                assert_eq!((p.x as i32, p.y as i32), (x, y));
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn screen_permission() -> &'static str {
     if unsafe { mac::CGPreflightScreenCaptureAccess() } {
@@ -141,21 +311,25 @@ pub fn set_cursor(x: i32, y: i32) {
 
 /**
  * Scrolling Capture: hold the pointer at `(x, y)` so moving the mouse does
- * nothing until unlock_pointer. Lockshot's own scroll events still go
- * through. macOS unhooks the pointer from the mouse, and hooks it back up
- * if Lockshot quits. Windows pins it to that spot, but lets go by itself on
- * Ctrl+Alt+Del or an app switch, so call this again before every scroll.
- * Returns whether the pointer is locked; Linux does not lock it.
+ * nothing until unlock_pointer; call it again to hold it somewhere else.
+ * Lockshot's own moves and scroll events still go through. macOS drops the
+ * mouse's own events (see mouse_block), and also unhooks the pointer from
+ * the mouse while Lockshot is the active app. Windows pins it to that spot,
+ * but lets go by itself on Ctrl+Alt+Del or an app switch, so call this
+ * again before every scroll. Returns whether the pointer is locked; Linux
+ * does not lock it.
  */
 #[cfg(target_os = "macos")]
 pub fn lock_pointer(x: i32, y: i32) -> bool {
-    unsafe {
+    let blocked = mouse_block::start(x, y);
+    let unhooked = unsafe {
         mac::CGWarpMouseCursorPosition(mac::CGPoint {
             x: x as f64,
             y: y as f64,
         });
         mac::CGAssociateMouseAndMouseCursorPosition(0) == 0
-    }
+    };
+    blocked || unhooked
 }
 
 #[cfg(target_os = "windows")]
@@ -200,6 +374,7 @@ pub fn escape_down() -> bool {
 /// Give the mouse back after lock_pointer. Safe to call when not locked.
 #[cfg(target_os = "macos")]
 pub fn unlock_pointer() {
+    mouse_block::stop();
     unsafe {
         mac::CGAssociateMouseAndMouseCursorPosition(1);
     }
@@ -472,5 +647,52 @@ pub fn settings_url(target: &str) -> Option<&'static str> {
         ("windows", "keyboard-shortcuts") => Some("ms-settings:easeofaccess-keyboard"),
         ("windows", "screen-recording") => Some("ms-settings:privacy-graphicscaptureprogrammatic"),
         _ => None,
+    }
+}
+
+/// Run with --ignored and LOCKSHOT_MOVER set to a program that posts a
+/// mouse move to the x and y it is given: while held, a move from another
+/// process (as the mouse's own are) must not move the pointer, and
+/// Lockshot's own must.
+#[cfg(all(test, target_os = "macos"))]
+mod lock_check {
+    #[test]
+    #[ignore]
+    fn holds_the_pointer_against_other_moves() {
+        use enigo::{Coordinate, Enigo, Mouse, Settings};
+        let mover = std::env::var("LOCKSHOT_MOVER").expect("LOCKSHOT_MOVER");
+        let at = |s: &str| {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let p = unsafe {
+                let e = super::mac::CGEventCreate(std::ptr::null());
+                let p = super::mac::CGEventGetLocation(e);
+                super::mac::CFRelease(e as *const _);
+                p
+            };
+            eprintln!("{s}: pointer at {:.0}, {:.0}", p.x, p.y);
+            (p.x.round() as i32, p.y.round() as i32)
+        };
+        assert!(super::lock_pointer(400, 400), "not locked");
+        let held = at("held");
+        std::process::Command::new(&mover)
+            .args(["900", "700"])
+            .status()
+            .unwrap();
+        let after_other = at("after another process moved it");
+        let mut enigo = Enigo::new(&Settings::default()).unwrap();
+        enigo.move_mouse(600, 500, Coordinate::Abs).unwrap();
+        let after_own = at("after Lockshot moved it");
+        super::lock_pointer(600, 500);
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        super::unlock_pointer();
+        std::process::Command::new(&mover)
+            .args(["700", "450"])
+            .status()
+            .unwrap();
+        let freed = at("after unlock, another process moved it");
+        assert_eq!(held, (400, 400));
+        assert_eq!(after_other, (400, 400));
+        assert_eq!(after_own, (600, 500));
+        assert_eq!(freed, (700, 450));
     }
 }

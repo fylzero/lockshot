@@ -94,9 +94,9 @@ export interface OverlayStart {
   index: number;
   width: number;
   height: number;
-  /** "scroll" selects an area like "area", and Lockshot scrolls and captures it. */
+  /** "scroll" picks a window by the part that scrolls, or selects an area like "area". */
   mode: "area" | "window" | "scroll";
-  /** Front to back; empty unless picking a window. */
+  /** Front to back; empty in area mode. */
   windows: WindowTarget[];
 }
 

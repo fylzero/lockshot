@@ -1504,6 +1504,20 @@ button.link:hover {
   pointer-events: none;
 }
 
+/* Scrolling Capture: where a click on the highlighted window will scroll. */
+.overlay-spot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgb(60 120 255),
+    0 1px 6px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+
 .overlay-window-label {
   position: absolute;
   transform: translate(-50%, -50%);

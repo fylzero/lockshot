@@ -16,6 +16,9 @@ export const CHANGELOG: ChangelogRelease[] = [
       "The window sizes itself to each capture or opened image, so it shows at 1:1 with no wasted space. A capture too big for the screen fills the screen and is shrunk to fit. Turn this off in Settings › General with Resize the window to each capture.",
       "New setting: Always open captures at 1:1. Turn it on in Settings › General to see every capture at its actual pixels, starting at the top left, even one too big for the window.",
       "The 1:1 button in the editor lights up while you're viewing at 1:1, the way Fit does.",
+      "Scrolling Capture can take a window. Start it and hover: the window under the pointer lights up, and clicking the part of it that scrolls (a chat thread, a page) captures that window and scrolls it right where you clicked, so a sidebar or another pane never scrolls instead. Dragging over an area works as before.",
+      "Scrolling Capture brings the window it scrolls to the front when it starts, so a window partly covering it, or Lockshot's own window, no longer ends up in the pages. On macOS and Windows the pages are read straight from that window, so anything that pops up in front of it during the run stays out of them too, and if another app covers the spot being scrolled, the window is brought back to the front.",
+      "Scrolling Capture pages no longer show where the mouse was. The pointer only visits the area to scroll, then waits on the white border around it while each page is taken, so no highlighted rows, hover buttons or tooltips get into the pages or the long image.",
     ],
   },
   {

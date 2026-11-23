@@ -13,8 +13,10 @@ import type { OverlayStart, WindowTarget } from "./types";
  * with an "overlay-start" event, so it can appear without loading a page
  * first. In window mode it highlights the window under the pointer instead
  * of drawing a selection, and a click captures that window. Scroll mode
- * (Scrolling Capture) draws a selection like area mode: Lockshot scrolls
- * the middle of it and captures just that part of the screen page by page.
+ * (Scrolling Capture) does both: it highlights the window under the
+ * pointer, and a click picks that window and scrolls it at the spot clicked,
+ * while a drag selects part of the screen to scroll from the middle.
+ * Lockshot then captures just that part of the screen page by page.
  */
 
 const win = getCurrentWindow();
@@ -29,11 +31,18 @@ const mode = ref<OverlayStart["mode"]>("area");
 const windows = ref<WindowTarget[]>([]);
 
 const picksWindow = computed(() => mode.value === "window");
+const highlightsWindows = computed(() => mode.value === "window" || mode.value === "scroll");
 
-/** Capture Window: the frontmost window under the pointer, in CSS pixels. */
+/** Scrolling Capture: the press has become a drag that selects an area. */
+const dragging = computed(() => {
+  const s = selection.value;
+  return !!s && s.w >= 4 && s.h >= 4;
+});
+
+/** The frontmost window under the pointer, in CSS pixels. */
 const hovered = computed(() => {
   const p = pointer.value;
-  if (!picksWindow.value || !p) return null;
+  if (!highlightsWindows.value || !p || dragging.value) return null;
   const W = window.innerWidth;
   const H = window.innerHeight;
   const target = windows.value.find(
@@ -51,7 +60,9 @@ const hoveredLabelStyle = computed(() => {
   const top = Math.max(0, h.y);
   const right = Math.min(window.innerWidth, h.x + h.w);
   const bottom = Math.min(window.innerHeight, h.y + h.h);
-  return { left: `${(left + right) / 2}px`, top: `${(top + bottom) / 2}px` };
+  /* Scrolling Capture: near the top, clear of the part being pointed at. */
+  const y = mode.value === "scroll" ? Math.min(top + 44, (top + bottom) / 2) : (top + bottom) / 2;
+  return { left: `${(left + right) / 2}px`, top: `${y}px` };
 });
 
 const hoveredSize = computed(() => {
@@ -125,7 +136,7 @@ async function begin(next: OverlayStart) {
     const [cursor, pos, size] = await Promise.all([cursorPosition(), win.outerPosition(), win.outerSize()]);
     const inside = cursor.x >= pos.x && cursor.y >= pos.y && cursor.x < pos.x + size.width && cursor.y < pos.y + size.height;
     /* Highlight the window under the pointer before it first moves. */
-    if (inside && picksWindow.value && !pointer.value) {
+    if (inside && highlightsWindows.value && !pointer.value) {
       const scale = size.width / window.innerWidth;
       pointer.value = { x: (cursor.x - pos.x) / scale, y: (cursor.y - pos.y) / scale };
     }
@@ -162,16 +173,25 @@ function onPointerMove(event: PointerEvent) {
 }
 
 async function onPointerUp() {
-  const s = selection.value;
   if (!start.value || finishing.value) return;
+  /* Read before clearing start, which empties the selection. */
+  const s = dragging.value ? selection.value : null;
+  const picked = s ? null : hovered.value?.target;
+  const p = pointer.value;
   start.value = null;
   finishing.value = true;
   const W = window.innerWidth;
   const H = window.innerHeight;
-  /* A click without a drag takes the whole screen. */
-  const rect = s && s.w >= 4 && s.h >= 4 ? { x: s.x / W, y: s.y / H, width: s.w / W, height: s.h / H } : null;
+  /* A click without a drag takes the whole screen, or in scroll mode the
+  window clicked, scrolled where it was clicked. */
+  let rect = s ? { x: s.x / W, y: s.y / H, width: s.w / W, height: s.h / H } : null;
+  let spot: { x: number; y: number } | null = null;
+  if (mode.value === "scroll" && picked && p) {
+    rect = { x: picked.x, y: picked.y, width: picked.width, height: picked.height };
+    spot = { x: p.x / W, y: p.y / H };
+  }
   try {
-    if (mode.value === "scroll") await api.finishScroll(session.value, rect);
+    if (mode.value === "scroll") await api.finishScroll(session.value, rect, spot);
     else await api.finishArea(session.value, rect);
   } catch (err) {
     if (mode.value === "scroll") {
@@ -240,14 +260,30 @@ onBeforeUnmount(() => {
       </div>
     </template>
     <template v-else-if="loaded">
+      <template v-if="hovered">
+        <div
+          class="overlay-window"
+          :style="{ left: `${hovered.x}px`, top: `${hovered.y}px`, width: `${hovered.w}px`, height: `${hovered.h}px` }"
+        />
+        <div v-if="pointer" class="overlay-spot" :style="{ left: `${pointer.x}px`, top: `${pointer.y}px` }" />
+        <div class="overlay-window-label" :style="hoveredLabelStyle">
+          <strong>{{ hovered.target.label || "Window" }}</strong>
+          <span>Click to scroll here · {{ hoveredSize }}</span>
+        </div>
+      </template>
       <div
         v-if="selection"
         class="overlay-selection"
         :style="{ left: `${selection.x}px`, top: `${selection.y}px`, width: `${selection.w}px`, height: `${selection.h}px` }"
       />
       <div v-if="selection && sizeLabel" class="overlay-size" :style="labelStyle">{{ sizeLabel }}</div>
-      <div v-if="!start" class="overlay-hint">
-        <span>{{ mode === "scroll" ? "Drag over the part to scroll" : "Drag to capture" }}</span>
+      <div v-if="!start && mode === 'scroll'" class="overlay-hint">
+        <span>Click the part of a window that scrolls</span>
+        <span>Drag to scroll an area instead</span>
+        <span><kbd>Esc</kbd> to cancel</span>
+      </div>
+      <div v-else-if="!start" class="overlay-hint">
+        <span>Drag to capture</span>
         <span>Click for full screen</span>
         <span><kbd>Esc</kbd> to cancel</span>
       </div>

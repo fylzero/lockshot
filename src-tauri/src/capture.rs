@@ -3,7 +3,7 @@
 //! is drawn over exactly what gets cropped and the overlays themselves never
 //! end up in the shot. Capture Window uses the same overlays to pick a
 //! window, then captures that window on its own, and Scrolling Capture uses
-//! them to select the part of the screen it scrolls.
+//! them to pick the window, or drag out the part of the screen, it scrolls.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -24,7 +24,8 @@ pub const OVERLAY_PREFIX: &str = "overlay-";
 struct MonitorShot {
     image: Arc<RgbaImage>,
     bounds: Bounds,
-    /// Capture Window: the windows on this display, front to back.
+    /// Capture Window and Scrolling Capture: the windows on this display,
+    /// front to back.
     windows: Vec<WindowTarget>,
 }
 
@@ -76,7 +77,8 @@ pub enum OverlayMode {
     Area,
     /// Click the window to capture.
     Window,
-    /// Select the part of the screen to scroll and capture page by page.
+    /// Click the part of a window that scrolls, or drag over part of the
+    /// display, to scroll and capture it page by page.
     Scroll,
 }
 
@@ -102,6 +104,13 @@ pub struct OverlayStart {
     pub height: u32,
     pub mode: OverlayMode,
     pub windows: Vec<WindowTarget>,
+}
+
+/// A point on an overlay, in fractions of its display.
+#[derive(Deserialize)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Deserialize)]
@@ -381,7 +390,7 @@ fn start_overlays(app: &AppHandle, mode: OverlayMode) -> Result<(), String> {
     ensure_permission(app)?;
     cancel_area(app);
 
-    let windows = if mode == OverlayMode::Window {
+    let windows = if mode != OverlayMode::Area {
         window_list::all()
     } else {
         Vec::new()
@@ -548,12 +557,15 @@ pub fn finish_window(
 /**
  * Scrolling Capture: the user selected the part of the screen to scroll, as
  * fractions of the display the overlay covered, or clicked for all of it.
+ * `spot`: they picked a window by clicking the part of it that scrolls, and
+ * `rect` is that window; the scroll stays on the spot they clicked.
  */
 pub fn finish_scroll(
     app: &AppHandle,
     label: &str,
     session_id: &str,
     rect: Option<Rect>,
+    spot: Option<Point>,
 ) -> Result<(), String> {
     let shot = take_shot(app, label, session_id)?;
     close_overlays(app);
@@ -572,6 +584,36 @@ pub fn finish_scroll(
     if right < left + 8 || bottom < top + 8 {
         return Err("Select a larger area to scroll.".into());
     }
+    /* A spot that somehow fell outside the area is dropped for the usual
+    search from the middle. */
+    let spot = spot
+        .map(|p| {
+            (
+                (p.x.clamp(0.0, 1.0) * bw).round() as u32,
+                (p.y.clamp(0.0, 1.0) * bh).round() as u32,
+            )
+        })
+        .filter(|&(x, y)| (left..right).contains(&x) && (top..bottom).contains(&y));
+    /* The window under where it will scroll: the one clicked, or the one
+    under the middle of a dragged area, front to back as the overlay showed. */
+    let (fx, fy) = match spot {
+        Some((x, y)) => (x as f64 / bw, y as f64 / bh),
+        None => (
+            (left + right) as f64 / 2.0 / bw,
+            (top + bottom) as f64 / 2.0 / bh,
+        ),
+    };
+    let window = shot
+        .windows
+        .iter()
+        .find(|w| fx >= w.x && fy >= w.y && fx < w.x + w.width && fy < w.y + w.height)
+        .map(|w| crate::scrolling::Window {
+            id: w.id,
+            x: w.x * bw,
+            y: w.y * bh,
+            width: w.width * bw,
+            height: w.height * bh,
+        });
     crate::quick_save::set_avoid(app, Some((rect.x, rect.y, rect.width, rect.height)));
     crate::scrolling::start(
         app,
@@ -581,6 +623,8 @@ pub fn finish_scroll(
             y: top,
             width: right - left,
             height: bottom - top,
+            spot,
+            window,
         },
     )
 }

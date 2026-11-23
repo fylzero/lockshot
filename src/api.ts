@@ -25,8 +25,12 @@ export const api = {
   finishArea: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
     invoke<void>("finish_area", { session, rect }),
   finishWindow: (session: string, windowId: number) => invoke<void>("finish_window", { session, windowId }),
-  finishScroll: (session: string, rect: { x: number; y: number; width: number; height: number } | null) =>
-    invoke<void>("finish_scroll", { session, rect }),
+  /** `spot`: a window was picked by clicking the part that scrolls, and `rect` is that window. */
+  finishScroll: (
+    session: string,
+    rect: { x: number; y: number; width: number; height: number } | null,
+    spot: { x: number; y: number } | null,
+  ) => invoke<void>("finish_scroll", { session, rect, spot }),
   scrollStop: () => invoke<void>("scroll_stop"),
   scrollSkipText: () => invoke<void>("scroll_skip_text"),
   overlayPending: () => invoke<OverlayStart | null>("overlay_pending"),

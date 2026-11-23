@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::autostart;
-use crate::capture::{self, CaptureReady, OverlayStart, Rect};
+use crate::capture::{self, CaptureReady, OverlayStart, Point, Rect};
 use crate::drag_out;
 use crate::export;
 use crate::hotkeys;
@@ -203,8 +203,9 @@ pub fn finish_scroll(
     window: WebviewWindow,
     session: String,
     rect: Option<Rect>,
+    spot: Option<Point>,
 ) -> Result<(), String> {
-    capture::finish_scroll(&app, window.label(), &session, rect)
+    capture::finish_scroll(&app, window.label(), &session, rect, spot)
 }
 
 /// The Stop button on the Scrolling Capture notice.

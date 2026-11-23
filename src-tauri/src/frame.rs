@@ -1,13 +1,15 @@
 //! The border around the area a Scrolling Capture is capturing. It is four
 //! thin windows just outside the area, so it never shows up in the pages and
 //! never catches the scroll. Separate windows rather than one see-through
-//! window, since see-through windows need macOS's private API.
+//! window, since see-through windows need macOS's private API. Between
+//! scrolls the pointer rests on it (see scrolling.rs), so it takes the
+//! pointer rather than letting it through to the app underneath.
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const FRAME_PREFIX: &str = "frame-";
 /// How thick the border is, in points on macOS and physical pixels elsewhere.
-const THICKNESS: i32 = 4;
+pub const THICKNESS: i32 = 4;
 
 /// An area on the desktop, in the units xcap reports displays in (points on
 /// macOS, physical pixels elsewhere).
@@ -104,7 +106,8 @@ pub fn show(app: &AppHandle, area: Area, display: Area) {
                 }
             }
         };
-        let _ = window.set_ignore_cursor_events(true);
+        /* Hold the resting pointer, so no app under the border reacts to it. */
+        let _ = window.set_ignore_cursor_events(false);
         /*
          * Size first, then position: macOS keeps a window's bottom-left
          * corner when it resizes, so resizing after placing it moves it.

@@ -4,14 +4,34 @@
 //! other pages whose lists are virtualized, so the full history is never in
 //! the page source at once.
 //!
-//! The scroll is a real scroll-wheel event sent with the pointer in the
-//! middle of the area, so it reaches the pane under it whether or not the
-//! window has keyboard focus. If nothing under the middle scrolls (the area
-//! takes in a still window or a header too), other spots in the area are
-//! tried until one does. Every run goes to its own folder of numbered
-//! files, and the pages are joined into one long image as they come in (see
-//! stitch.rs); on macOS the text can be read off them too (see ocr.rs).
-//! Esc, the Stop button, or moving the mouse ends it early.
+//! The area is either dragged out, or a window picked by clicking the part
+//! of it that scrolls. The scroll is a real scroll-wheel event sent with
+//! the pointer at that spot (the middle of a dragged area), so it reaches
+//! the pane under it whether or not the window has keyboard focus. In a
+//! dragged area, if nothing under the middle scrolls (the area takes in a
+//! still window or a header too), other spots are tried until one does; a
+//! clicked spot is kept to, so the scroll never wanders to another pane.
+//!
+//! The pointer only visits the area to scroll. Straight after each scroll
+//! it moves onto the border Lockshot draws around the area and waits there
+//! while the page is captured, so nothing in the pages shows the hover look
+//! (a highlighted row, a message's action bar, a tooltip). Scrolling by
+//! dragging the scroll bar instead would not need the visit, but scroll
+//! bars are too often hidden until hovered (macOS, Slack, Discord), and a
+//! dragged thumb moves by amounts that change as a virtualized list loads.
+//!
+//! The window under the scroll spot is brought to the front first: the app
+//! picked, rather than whatever covered part of it, or Lockshot's own
+//! window, which comes forward when the selection overlay closes. If
+//! another app covers the spot later, the window is brought back. Pages are
+//! read off that window alone when the system allows (macOS, Windows), so
+//! a window or notice that pops up in front of it never lands in them;
+//! otherwise off the screen.
+//!
+//! Every run goes to its own folder of numbered files, and the pages are
+//! joined into one long image as they come in (see stitch.rs); on macOS the
+//! text can be read off them too (see ocr.rs). Esc, the Stop button, or
+//! moving the mouse ends it early.
 
 use std::io::Cursor;
 use std::ops::Range;
@@ -27,7 +47,7 @@ use tauri::{AppHandle, Manager};
 use crate::commands::AppState;
 use crate::settings::{self, Settings};
 use crate::stitch::{Pane, Stitcher};
-use crate::{export, frame, hotkeys, ocr, platform, quick_save};
+use crate::{export, frame, hotkeys, ocr, platform, quick_save, window_list};
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -45,6 +65,18 @@ const POINTER_SLACK: i32 = 24;
 const STALL_WAIT: Duration = Duration::from_millis(1500);
 /// Aim to scroll this share of the scrolling pane, so pages overlap a little.
 const PAGE_SHARE: f64 = 0.7;
+/// Give a window brought to the front this long to get there.
+const RAISE_WAIT: Duration = Duration::from_millis(300);
+/// Leave the pointer on the scroll spot this long after a scroll before
+/// moving it away: Windows hands a wheel event to whatever window is under
+/// the pointer when it gets round to it, not when it was sent.
+const SCROLL_LANDS: Duration = Duration::from_millis(60);
+/// Give a hover look (a row highlight, an action bar) at least this long to
+/// fade once the pointer has moved off the area, before capturing.
+const HOVER_FADES: Duration = Duration::from_millis(200);
+/// Keep the resting spot this far from the display's edges, where macOS
+/// shows a hidden menu bar or Dock and runs hot corners.
+const EDGE_MARGIN: i32 = 8;
 
 pub fn is_running() -> bool {
     RUNNING.load(Ordering::SeqCst)
@@ -75,6 +107,21 @@ pub struct Target {
     pub y: u32,
     pub width: u32,
     pub height: u32,
+    /// Where the user clicked to pick a window, relative to the display:
+    /// scroll there and only there. None for a dragged area.
+    pub spot: Option<(u32, u32)>,
+    /// The window under the scroll spot, if any.
+    pub window: Option<Window>,
+}
+
+/// The window being scrolled: its id, and its bounds relative to the
+/// display (it may reach past the display's edges).
+pub struct Window {
+    pub id: u32,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 /// Where in the area to try scrolling, as fractions of its width and
@@ -95,6 +142,9 @@ const SPOTS: [(f64, f64); 9] = [
 impl Target {
     /// The spots to try scrolling at, on the desktop, best first.
     fn spots(&self) -> Vec<(i32, i32)> {
+        if let Some((x, y)) = self.spot {
+            return vec![(self.display.0 + x as i32, self.display.1 + y as i32)];
+        }
         SPOTS
             .iter()
             .map(|&(fx, fy)| {
@@ -104,6 +154,35 @@ impl Target {
                 )
             })
             .collect()
+    }
+
+    /**
+     * Where the pointer waits while a page is captured, on the desktop: in
+     * the middle of one side of the border frame.rs draws just outside the
+     * area. That border is Lockshot's own window, so no app under it sees
+     * the pointer and shows a hover look or a tooltip that could reach into
+     * the area. None when every side is against the display's edge (the
+     * whole screen), where the pointer has to stay on the scroll spot.
+     */
+    fn rest_spot(&self, display_width: u32, display_height: u32) -> Option<(i32, i32)> {
+        let (x, y) = (self.x as i32, self.y as i32);
+        let (w, h) = (self.width as i32, self.height as i32);
+        let (dw, dh) = (display_width as i32, display_height as i32);
+        let half = frame::THICKNESS / 2;
+        let fits = |px: i32, py: i32| {
+            (EDGE_MARGIN..dw - EDGE_MARGIN).contains(&px)
+                && (EDGE_MARGIN..dh - EDGE_MARGIN).contains(&py)
+        };
+        /* Right first: the side a list's scroll bar is on, so the shortest trip. */
+        [
+            (x + w + half, y + h / 2),
+            (x - 1 - half, y + h / 2),
+            (x + w / 2, y + h + half),
+            (x + w / 2, y - 1 - half),
+        ]
+        .into_iter()
+        .find(|&(px, py)| fits(px, py))
+        .map(|(px, py)| (self.display.0 + px, self.display.1 + py))
     }
 }
 
@@ -173,9 +252,13 @@ struct Done {
     note: String,
 }
 
-/// Moves the pointer and sends scroll-wheel steps.
+/// Moves the pointer, holds it where it was put, and sends scroll-wheel steps.
 struct Pointer {
     enigo: Enigo,
+    /// Whether the pointer is held still between moves (macOS, Windows).
+    locked: bool,
+    /// Where Lockshot last put the pointer, to tell when the user moves it.
+    at: Option<(i32, i32)>,
 }
 
 impl Pointer {
@@ -186,7 +269,53 @@ impl Pointer {
         };
         let enigo = Enigo::new(&settings)
             .map_err(|err| format!("Lockshot could not control the mouse to scroll: {err}"))?;
-        Ok(Self { enigo })
+        Ok(Self {
+            enigo,
+            locked: false,
+            at: None,
+        })
+    }
+
+    /// Put the pointer at `point` and hold it there; on Linux, which does
+    /// not hold it, just move it. Returns whether it is held.
+    fn hold(&mut self, point: (i32, i32)) -> bool {
+        self.move_to(point);
+        self.locked = platform::lock_pointer(point.0, point.1);
+        self.at = Some(point);
+        self.locked
+    }
+
+    /**
+     * Move the held pointer to `point`, as a real move, so the app it
+     * leaves drops its hover look and the one it lands on routes the next
+     * scroll there, then hold it there. Windows will not move a pointer
+     * out of its hold, so the hold is let go for the move there; holding
+     * again also takes back a hold Windows let go of by itself
+     * (Ctrl+Alt+Del, an app switch). macOS keeps holding: its own moves
+     * get through.
+     */
+    fn go(&mut self, point: (i32, i32)) {
+        if self.locked && cfg!(target_os = "windows") {
+            platform::unlock_pointer();
+        }
+        self.move_to(point);
+        if self.locked && !STOP.load(Ordering::SeqCst) {
+            platform::lock_pointer(point.0, point.1);
+        }
+        self.at = Some(point);
+    }
+
+    /// Whether the pointer is now away from where Lockshot put it: the
+    /// user took the mouse back. Never while it is held: then the mouse is
+    /// meant to do nothing, and the next move puts the pointer back anyway.
+    fn moved_by_user(&self, app: &AppHandle) -> bool {
+        if self.locked {
+            return false;
+        }
+        let (Some((px, py)), Some((x, y))) = (self.at, platform::cursor_point(app)) else {
+            return false;
+        };
+        (x - px).abs() > POINTER_SLACK || (y - py).abs() > POINTER_SLACK
     }
 
     fn move_to(&mut self, (x, y): (i32, i32)) {
@@ -276,6 +405,8 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let spots = target.spots();
     let mut spot = 0;
     let mut point = spots[0];
+    let display_width = monitor.width().map_err(|err| err.to_string())?;
+    let display_height = monitor.height().map_err(|err| err.to_string())?;
     frame::show(
         app,
         frame::Area {
@@ -287,24 +418,42 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
         frame::Area {
             x: target.display.0,
             y: target.display.1,
-            width: monitor.width().map_err(|err| err.to_string())? as i32,
-            height: monitor.height().map_err(|err| err.to_string())? as i32,
+            width: display_width as i32,
+            height: display_height as i32,
         },
     );
+    let rest = target.rest_spot(display_width, display_height);
+    debug_log(&format!("scroll at {point:?}, rest at {rest:?}"));
     let mut pointer = Pointer::new()?;
     let up = settings.scroll_direction == "up";
     let direction = if up { -1 } else { 1 };
     let delay = Duration::from_millis(settings.scroll_delay_ms as u64);
+    /* With the pointer moved off, also give the hover look time to go. */
+    let settle = if rest.is_some() {
+        delay.max(SCROLL_LANDS + HOVER_FADES)
+    } else {
+        delay
+    };
     let max_pages = settings.scroll_max_pages.max(1);
 
-    /* Hold the pointer in the middle of the area, where the scrolls go,
-    until the run ends; on Linux moving the mouse stops the run instead. */
-    pointer.move_to(point);
-    let locked = platform::lock_pointer(point.0, point.1);
+    /* Hold the pointer off the area until the run ends, visiting the
+    scroll spot only to scroll; on Linux moving the mouse stops the run
+    instead. */
+    let locked = pointer.hold(rest.unwrap_or(point));
+    if let Some(window) = &target.window {
+        window_list::bring_to_front(window.id);
+    }
 
-    /* The area is read off the screen, so let the overlay go first. */
-    std::thread::sleep(Duration::from_millis(250));
-    let first = capture(app, &monitor, target)?;
+    /* The area is read off the screen, so let the overlay go and the
+    window come forward first. */
+    std::thread::sleep(Duration::from_millis(250).max(settle).max(RAISE_WAIT));
+    let screen = capture_screen(app, &monitor, target)?;
+    let source = Source::pick(target, &screen);
+    /* Every page from the same source, so they compare exactly. */
+    let first = match source {
+        Source::Screen => screen,
+        Source::Window { .. } => capture(app, &monitor, target, &source)?,
+    };
 
     let dir = output_dir(app, &settings)?;
     let keep_pages = settings.scroll_output != "image";
@@ -330,7 +479,6 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
     let scale = last.height() as f64 / target.height.max(1) as f64;
     let mut step = Step::new(target.height as f64, scale);
     let mut stalls = 0;
-    let mut placed = false;
     /* Whether anything has scrolled yet: until then a scroll that moves
     nothing means the spot is wrong, not that the end was reached. */
     let mut scrolled = false;
@@ -345,27 +493,30 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             break;
         }
         /* The user took the mouse back: treat it as Stop. */
-        if placed {
-            if let Some((x, y)) = platform::cursor_point(app) {
-                let (px, py) = point;
-                if (x - px).abs() > POINTER_SLACK || (y - py).abs() > POINTER_SLACK {
-                    note = "Stopped".to_string();
-                    break;
-                }
+        if pointer.moved_by_user(app) {
+            note = "Stopped".to_string();
+            break;
+        }
+        /* Another app came up over the spot: bring the window back, or
+        the scroll would go to that app. */
+        if let Some(window) = &target.window {
+            if window_list::frontmost_at(point.0 as f64, point.1 as f64) != Some(window.id) {
+                debug_log("something covers the scroll spot: bringing the window back");
+                window_list::bring_to_front(window.id);
+                sleep_unless_stopped(RAISE_WAIT);
             }
         }
-        pointer.move_to(point);
-        if locked && !STOP.load(Ordering::SeqCst) {
-            /* Windows lets go of the pointer by itself now and then. */
-            platform::lock_pointer(point.0, point.1);
-        }
-        placed = true;
+        pointer.go(point);
         pointer.scroll(step.units() * direction)?;
         let started = Instant::now();
+        if let Some(rest) = rest {
+            sleep_unless_stopped(SCROLL_LANDS);
+            pointer.go(rest);
+        }
         let wait = if stalls > 0 {
-            delay + STALL_WAIT
+            settle + STALL_WAIT
         } else {
-            delay
+            settle
         };
         sleep_unless_stopped(wait.saturating_sub(started.elapsed()));
         if STOP.load(Ordering::SeqCst) {
@@ -373,7 +524,7 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             break;
         }
 
-        let next = capture(app, &monitor, target)?;
+        let next = capture(app, &monitor, target, &source)?;
         if next.dimensions() != last.dimensions() {
             note = "Stopped because the display changed".to_string();
             break;
@@ -393,20 +544,18 @@ fn run(app: &AppHandle, target: &Target) -> Result<Done, String> {
             if !scrolled && spot + 1 < spots.len() {
                 spot += 1;
                 point = spots[spot];
-                /* The pointer is still at the last spot until the next turn
-                moves it, so do not take that for the user moving it. */
-                placed = false;
                 debug_log(&format!("nothing scrolled there: trying spot {spot}"));
                 continue;
             }
             if !scrolled {
-                /* No spot moved anything: one last, longer try in the middle. */
+                /* No spot moved anything: one last, longer try at the first. */
                 point = spots[0];
-                placed = false;
             }
             stalls += 1;
             if stalls >= 2 {
-                note = if !scrolled {
+                note = if !scrolled && target.spot.is_some() {
+                    "Nothing scrolled where you clicked".to_string()
+                } else if !scrolled {
                     "Nothing in the area scrolled".to_string()
                 } else if up {
                     "Reached the top".to_string()
@@ -551,8 +700,127 @@ fn find_display((x, y): (i32, i32)) -> Result<xcap::Monitor, String> {
         .ok_or_else(|| "That display is no longer available.".to_string())
 }
 
+/// Where each page is read from.
+enum Source {
+    /// The area of the screen, with the progress notice moved off it.
+    Screen,
+    /// The window alone, cut to the area: `crop` is x, y, width, height
+    /// in the window image's pixels.
+    Window {
+        window: xcap::Window,
+        crop: (u32, u32, u32, u32),
+    },
+}
+
+/// Below this mean grey difference, the window's own image cut to the area
+/// counts as the same picture as the screen there.
+const SAME_PICTURE: f64 = 2.0;
+
+impl Source {
+    /**
+     * Read pages off the window when it can be captured on its own and the
+     * area lies inside it, so windows that come up in front never spoil
+     * them. Checked against `screen`, the area captured off the screen
+     * just now with the window in front: the cut must line up with it
+     * exactly, which also catches window images with frames or borders
+     * trimmed differently from their bounds (Windows).
+     */
+    fn pick(target: &Target, screen: &RgbaImage) -> Source {
+        if cfg!(target_os = "linux") {
+            /* X11 reads window pixels off the screen anyway. */
+            return Source::Screen;
+        }
+        let Some(w) = &target.window else {
+            return Source::Screen;
+        };
+        let inside = target.x as f64 >= w.x - 0.5
+            && target.y as f64 >= w.y - 0.5
+            && (target.x + target.width) as f64 <= w.x + w.width + 0.5
+            && (target.y + target.height) as f64 <= w.y + w.height + 0.5;
+        if !inside {
+            debug_log("area reaches past the window: reading the screen");
+            return Source::Screen;
+        }
+        let found = window_list::find(w.id).and_then(|window| {
+            let image = window.capture_image().map_err(|err| err.to_string())?;
+            Ok((window, image))
+        });
+        let (window, image) = match found {
+            Ok(found) => found,
+            Err(err) => {
+                debug_log(&format!("window not captured ({err}): reading the screen"));
+                return Source::Screen;
+            }
+        };
+        let scale = image.width() as f64 / w.width.max(1.0);
+        let crop = (
+            ((target.x as f64 - w.x) * scale).round().max(0.0) as u32,
+            ((target.y as f64 - w.y) * scale).round().max(0.0) as u32,
+            screen.width(),
+            screen.height(),
+        );
+        let source = Source::Window { window, crop };
+        let fits = match source.cut(&image) {
+            Some(cut) => {
+                let off = misfit(
+                    &Frame::new(screen),
+                    &Frame::new(&cut),
+                    0,
+                    0..cut.height() as usize,
+                    0..cut.width() as usize,
+                );
+                debug_log(&format!("window image cut to the area differs by {off:.2}"));
+                off < SAME_PICTURE
+            }
+            None => false,
+        };
+        if fits {
+            debug_log("reading pages off the window");
+            source
+        } else {
+            debug_log("window image does not line up: reading the screen");
+            Source::Screen
+        }
+    }
+
+    /// The area out of a capture of the window, or None if it no longer
+    /// holds it (the window shrank).
+    fn cut(&self, image: &RgbaImage) -> Option<RgbaImage> {
+        let Source::Window {
+            crop: (x, y, w, h), ..
+        } = *self
+        else {
+            return None;
+        };
+        (x + w <= image.width() && y + h <= image.height())
+            .then(|| image::imageops::crop_imm(image, x, y, w, h).to_image())
+    }
+}
+
+/// The selected area as it is now.
+fn capture(
+    app: &AppHandle,
+    monitor: &xcap::Monitor,
+    target: &Target,
+    source: &Source,
+) -> Result<RgbaImage, String> {
+    if let Source::Window { window, .. } = source {
+        let image = window
+            .capture_image()
+            .map_err(|err| format!("Could not capture the window: {err}"))?;
+        return source
+            .cut(&image)
+            .ok_or_else(|| "The window got smaller than the area being captured.".to_string());
+    }
+    capture_screen(app, monitor, target)
+}
+
 /// The selected area as it is on screen now, with the toast out of the way.
-fn capture(app: &AppHandle, monitor: &xcap::Monitor, target: &Target) -> Result<RgbaImage, String> {
+fn capture_screen(
+    app: &AppHandle,
+    monitor: &xcap::Monitor,
+    target: &Target,
+) -> Result<RgbaImage, String> {
     if quick_save::park_if_covering(app) {
         std::thread::sleep(Duration::from_millis(120));
     }
@@ -998,6 +1266,8 @@ mod tests {
             y: 100,
             width: 400,
             height: 800,
+            spot: None,
+            window: None,
         };
         let spots = target.spots();
         assert_eq!(spots[0], (500, 550));
@@ -1005,6 +1275,61 @@ mod tests {
         for (x, y) in spots {
             assert!((300..700).contains(&x) && (150..950).contains(&y));
         }
+    }
+
+    #[test]
+    fn a_clicked_spot_is_the_only_one() {
+        let target = Target {
+            display: (100, 50),
+            x: 200,
+            y: 100,
+            width: 400,
+            height: 800,
+            spot: Some((520, 300)),
+            window: None,
+        };
+        assert_eq!(target.spots(), vec![(620, 350)]);
+    }
+
+    #[test]
+    fn the_pointer_rests_on_the_border_outside_the_area() {
+        let mut target = Target {
+            display: (100, 50),
+            x: 200,
+            y: 100,
+            width: 400,
+            height: 800,
+            spot: None,
+            window: None,
+        };
+        /* The right side's border, halfway down, on the desktop. */
+        assert_eq!(target.rest_spot(1920, 1080), Some((100 + 602, 50 + 500)));
+        /* Against the right edge: the left side. */
+        target.x = 1520;
+        assert_eq!(target.rest_spot(1920, 1080), Some((100 + 1517, 50 + 500)));
+        /* The whole display: nowhere off the area. */
+        let whole = Target {
+            display: (0, 0),
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            spot: None,
+            window: None,
+        };
+        assert_eq!(whole.rest_spot(1920, 1080), None);
+        /* A border only a few points from the display's edge is skipped
+        (hot corners, a hidden Dock or menu bar). */
+        let full_width = Target {
+            display: (0, 0),
+            x: 0,
+            y: 3,
+            width: 1920,
+            height: 1000,
+            spot: None,
+            window: None,
+        };
+        assert_eq!(full_width.rest_spot(1920, 1080), Some((960, 1005)));
     }
 
     /// The end of a list of look-alike rows (a GitHub runs page): the last
@@ -1202,5 +1527,52 @@ mod pipeline_tests {
             );
             assert!(missing.len() <= 2, "{name} misread {missing:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod source_check {
+    use super::*;
+
+    /// Run with --ignored: the frontmost window's own image, cut to a part
+    /// of it, must line up with the screen there.
+    #[test]
+    #[ignore]
+    fn the_front_window_lines_up_with_the_screen() {
+        let w = &window_list::all()[0];
+        let monitor = xcap::Monitor::all()
+            .unwrap()
+            .into_iter()
+            .find(|m| {
+                let (x, y) = (m.x().unwrap() as f64, m.y().unwrap() as f64);
+                let (mw, mh) = (m.width().unwrap() as f64, m.height().unwrap() as f64);
+                w.x >= x && w.y >= y && w.x < x + mw && w.y < y + mh
+            })
+            .unwrap();
+        let (mx, my) = (monitor.x().unwrap(), monitor.y().unwrap());
+        let window = Window {
+            id: w.id,
+            x: w.x - mx as f64,
+            y: w.y - my as f64,
+            width: w.width,
+            height: w.height,
+        };
+        let target = Target {
+            display: (mx, my),
+            x: (window.x + 40.0) as u32,
+            y: (window.y + 60.0) as u32,
+            width: (w.width - 80.0).min(600.0) as u32,
+            height: (w.height - 120.0).min(500.0) as u32,
+            spot: None,
+            window: Some(window),
+        };
+        let screen = monitor
+            .capture_region(target.x, target.y, target.width, target.height)
+            .unwrap();
+        eprintln!("window {}", w.label);
+        assert!(matches!(
+            Source::pick(&target, &screen),
+            Source::Window { .. }
+        ));
     }
 }

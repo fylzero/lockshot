@@ -117,7 +117,10 @@ fn target_monitor(app: &AppHandle) -> Option<Monitor> {
     }
     let point = platform::cursor_point(app).map(|(x, y)| (x as f64, y as f64));
     if let Some(point) = point {
-        if let Some(index) = monitors.iter().position(|m| monitor_rect(m).contains(point)) {
+        if let Some(index) = monitors
+            .iter()
+            .position(|m| monitor_rect(m).contains(point))
+        {
             return monitors.into_iter().nth(index);
         }
     }
@@ -176,7 +179,11 @@ pub fn place_main(app: &AppHandle, window: &WebviewWindow) {
     } else {
         monitor.scale_factor() / scale
     };
-    let next = centred(work_rect(&monitor), current.width * ratio, current.height * ratio);
+    let next = centred(
+        work_rect(&monitor),
+        current.width * ratio,
+        current.height * ratio,
+    );
     if cfg!(target_os = "macos") {
         let _ = window.set_position(tauri::LogicalPosition::new(next.x, next.y));
         if next.width < current.width || next.height < current.height {
@@ -250,7 +257,11 @@ pub fn size_main(window: &WebviewWindow, width: f64, height: f64) {
     let frame_w = native(outer.width.saturating_sub(inner.width) as f64, scale);
     let frame_h = native(outer.height.saturating_sub(inner.height) as f64, scale);
     /* Logical pixels are points on macOS and scaled pixels elsewhere. */
-    let to_native = if cfg!(target_os = "macos") { 1.0 } else { scale };
+    let to_native = if cfg!(target_os = "macos") {
+        1.0
+    } else {
+        scale
+    };
     let next = resized(
         work_rect(&monitor),
         current,

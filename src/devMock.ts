@@ -119,7 +119,10 @@ export function installMock() {
   };
   /* #toast shows the save notice window; #toast-error its failure state. */
   const toastWindow = location.hash.includes("toast");
-  mockWindows(toastWindow ? "toast" : "main");
+  /* #overlay-area, #overlay-window or #overlay-scroll shows a capture overlay
+  over the sample image; what it would send is logged to the console. */
+  const overlayMode = /#overlay-(area|window|scroll)/.exec(location.hash)?.[1];
+  mockWindows(overlayMode ? "overlay-0" : toastWindow ? "toast" : "main");
   let opened = 0;
   mockIPC((cmd, args) => {
     const a = args as Record<string, any>;
@@ -188,6 +191,24 @@ export function installMock() {
         return null;
       case "toast_pending":
         return toastWindow ? sampleToast(location.hash) : null;
+      case "overlay_pending":
+        return overlayMode
+          ? {
+              session: "s1",
+              index: 0,
+              width: 1600,
+              height: 1000,
+              mode: overlayMode,
+              /* The sample image's window. */
+              windows: overlayMode === "area" ? [] : [{ id: 1, x: 0.125, y: 0.14, width: 0.75, height: 0.72, label: "Sample — Quarterly report" }],
+            }
+          : null;
+      case "finish_area":
+      case "finish_window":
+      case "finish_scroll":
+      case "cancel_area":
+        console.info(`[overlay] ${cmd}`, JSON.stringify(a));
+        return null;
       case "plugin:app|version":
         return "0.1.0";
       default:
