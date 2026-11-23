@@ -106,6 +106,14 @@ Change any global hotkey, or hand Lockshot the system screenshot keys with step-
 
 **[⬇️ Download Lockshot for macOS (Apple Silicon)](https://github.com/fylzero/lockshot/releases/latest/download/Lockshot-macos-arm64.dmg)**
 
+Or install it with [Homebrew](https://brew.sh):
+
+```sh
+brew install fylzero/tap/lockshot
+```
+
+Lockshot updates itself, so Homebrew leaves upgrades to it. If Lockshot is already in Applications, add `--force` so Homebrew takes it over.
+
 Current macOS builds are **Apple Silicon only**. Releases are signed with a Developer ID certificate and notarized by Apple.
 
 On first launch, Lockshot asks for **Screen Recording** permission (*System Settings › Privacy & Security › Screen & System Audio Recording*). macOS applies it after a relaunch, which Lockshot offers to do for you. Because releases are signed with the same identity, the permission carries over to future updates. Scrolling Capture also asks for **Accessibility** (*Privacy & Security › Accessibility*) the first time you use it, so it can scroll the area you select. HEIC export uses the system encoder.
