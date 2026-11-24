@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.4.5",
+    date: "November 23, 2026",
+    notes: [
+      "On macOS, Lockshot has a refreshed icon in the Dock and the Command-Tab switcher. It now shows as a proper rounded square on the latest macOS, instead of shrunk inside a gray tile with thin lines along its edges.",
+    ],
+  },
+  {
     version: "1.4.4",
     date: "November 23, 2026",
     notes: [
