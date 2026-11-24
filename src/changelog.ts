@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.4.2",
+    date: "November 23, 2026",
+    notes: [
+      "The GitHub link and the version number moved from the bottom of the window into the tab bar, next to the settings gear, and the bar along the bottom is gone. Click the version to open the Change Log, as before.",
+    ],
+  },
+  {
     version: "1.4.1",
     date: "November 23, 2026",
     notes: [
