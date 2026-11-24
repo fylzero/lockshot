@@ -2764,7 +2764,7 @@ dependencies = [
 
 [[package]]
 name = "lockshot"
-version = "1.4.3"
+version = "1.4.4"
 dependencies = [
  "block2",
  "chrono",
