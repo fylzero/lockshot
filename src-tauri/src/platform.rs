@@ -589,7 +589,8 @@ pub fn restore_dock_icon() {
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send};
 
-    let bytes: &[u8] = include_bytes!("../icons/icon.png");
+    // The macOS squircle icon, the same one the bundled .app shows.
+    let bytes: &[u8] = include_bytes!("../icons/icon.icns");
     unsafe {
         let data: *mut AnyObject = msg_send![
             class!(NSData),

@@ -22,6 +22,21 @@ export const env = reactive({
 export const systemShortcuts = ref<SystemShortcut[]>([]);
 
 /**
+ * Whether captures can run (false only on macOS without Screen Recording).
+ * The capture buttons grey out while it's false. The permission cards keep
+ * it current as they poll.
+ */
+export const screenAllowed = ref(true);
+
+export async function refreshScreenAllowed() {
+  try {
+    screenAllowed.value = (await api.permissionStatus()).screen !== "denied";
+  } catch {
+    /* keep the last answer */
+  }
+}
+
+/**
  * Re-read the OS's screenshot shortcuts. `keysFreed` says the caller just
  * freed some itself, so register the hotkeys again even though the list it
  * already stored shows no change.
@@ -96,6 +111,7 @@ export async function loadSettings() {
   settings.value = boot.settings;
   themePreference.value = boot.settings.theme;
   void refreshSystemShortcuts();
+  void refreshScreenAllowed();
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;

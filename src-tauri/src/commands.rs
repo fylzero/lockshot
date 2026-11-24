@@ -464,7 +464,8 @@ pub fn screens(app: AppHandle) -> Vec<String> {
 }
 
 #[tauri::command]
-pub fn permission_status() -> PermissionStatus {
+pub fn permission_status(app: AppHandle) -> PermissionStatus {
+    tray::sync_capture(&app);
     platform::permission_status()
 }
 

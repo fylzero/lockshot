@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import Icon from "../components/Icon.vue";
 import PermissionCard from "../components/PermissionCard.vue";
+import MacPermissions from "../components/MacPermissions.vue";
 import HotkeyRecorder from "../components/HotkeyRecorder.vue";
 import SystemShortcutNotice from "../components/SystemShortcutNotice.vue";
 import { api, errorMessage } from "../api";
@@ -11,7 +12,8 @@ import { fileManagerName } from "../platform";
 import type { CaptureMode, HotkeyAction, PermissionStatus } from "../types";
 
 /*
- * Home walks through setup one step at a time: Screen Recording, then
+ * Home walks through setup one step at a time: Screen Recording (and, on
+ * macOS, Accessibility for Scrolling Capture, so both are asked at once), then
  * hotkeys, then where to find the menu bar icon. Only once that's done does
  * it show the capture buttons. Progress lives in settings, so relaunching
  * for the macOS permission picks up at the next step.
@@ -39,12 +41,37 @@ function goTo(next: Step) {
   saveSettingsSoon();
 }
 
-/* Screen Recording counts as done once macOS reports it allowed (after the
-   relaunch it asks for), or right away where there's nothing to allow. */
+/* The permission step is done once macOS reports Screen Recording allowed
+   (after the relaunch it asks for), or right away where there's nothing to
+   allow. Accessibility is optional: the step waits for it until its block is
+   dismissed, which is remembered so the Screen Recording relaunch doesn't
+   bring it back. */
 function onPermission(status: PermissionStatus) {
   permission.value = status;
-  if (step.value === "permission" && status.screen !== "denied") goTo("hotkeys");
+  const inputDone = status.input !== "denied" || inputSkipped.value;
+  if (step.value === "permission" && status.screen !== "denied" && inputDone) goTo("hotkeys");
 }
+
+const SKIP_INPUT_KEY = "lockshot.skipAccessibility";
+const inputSkipped = ref(readSkip());
+function readSkip() {
+  try {
+    return localStorage.getItem(SKIP_INPUT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function skipInput() {
+  inputSkipped.value = true;
+  try {
+    localStorage.setItem(SKIP_INPUT_KEY, "1");
+  } catch {
+    /* only lasts this session then */
+  }
+  if (permission.value) onPermission(permission.value);
+}
+
+const isMac = env.os === "macos";
 
 /* After setup, the permission card comes back only if access is revoked. */
 const permission = ref<PermissionStatus | null>(null);
@@ -119,8 +146,16 @@ async function usePreset(which = preset.value) {
         <div class="welcome-step">
           <span class="step-num">1</span>
           <div style="flex: 1">
-            <h3>Allow Screen Recording</h3>
-            <PermissionCard embedded @status="onPermission" />
+            <template v-if="isMac">
+              <h3>Lockshot needs your permission</h3>
+              <p v-if="inputSkipped" class="muted">Screen Recording lets Lockshot capture other apps' windows. You can allow Accessibility for Scrolling Capture later in Settings.</p>
+              <p v-else class="muted">Screen Recording is needed to capture; Accessibility only for Scrolling Capture. Turn on both now and they're out of the way.</p>
+              <MacPermissions :hide-input="inputSkipped" @status="onPermission" @dismiss-input="skipInput" />
+            </template>
+            <template v-else>
+              <h3>Allow Screen Recording</h3>
+              <PermissionCard @status="onPermission" />
+            </template>
           </div>
         </div>
       </div>
@@ -185,8 +220,9 @@ async function usePreset(which = preset.value) {
         <div v-if="permission?.screen === 'denied'" class="card">
           <div class="welcome-step">
             <div style="flex: 1">
-              <h3>Screen Recording is turned off</h3>
-              <PermissionCard embedded @status="onPermission" />
+              <h3>{{ isMac && permission?.input === "denied" && !inputSkipped ? "Lockshot's permissions are turned off" : "Screen Recording is turned off" }}</h3>
+              <MacPermissions v-if="isMac" only-missing :hide-input="inputSkipped" @status="onPermission" @dismiss-input="skipInput" />
+              <PermissionCard v-else @status="onPermission" />
             </div>
           </div>
         </div>
@@ -203,7 +239,9 @@ async function usePreset(which = preset.value) {
           <button class="ghost" @click="settings.quickSave = false; saveSettingsSoon()">Turn off</button>
         </div>
 
-        <div class="capture-cards">
+        <!-- Captures fail without Screen Recording, so only the card above
+             shows until it's back on. Opening an image still works. -->
+        <div v-if="permission?.screen !== 'denied'" class="capture-cards">
           <button class="capture-card" @click="capture('area')">
             <Icon name="area" />
             <strong>Capture area</strong>

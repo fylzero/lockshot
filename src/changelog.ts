@@ -7,6 +7,14 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.4.3",
+    date: "November 23, 2026",
+    notes: [
+      "On macOS, Lockshot has a new icon in the Dock and the Command-Tab switcher, so it's easier to tell apart from Dispatch, Recon, and Shipyard at a glance. The logo inside the app and everywhere else is unchanged.",
+      "On macOS, the first setup step asks for Accessibility (used by Scrolling Capture) right below Screen Recording, so both permissions are out of the way at once. It's optional: skip it and allow it later in Settings.",
+    ],
+  },
+  {
     version: "1.4.2",
     date: "November 23, 2026",
     notes: [

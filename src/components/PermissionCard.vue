@@ -3,17 +3,16 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { relaunch } from "@tauri-apps/plugin-process";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
-import { showToast } from "../store";
+import { screenAllowed, showToast } from "../store";
 import type { PermissionStatus } from "../types";
 
-/* Embedded: the parent card already titles the step, so drop the warning
-   box, icon and heading and show only the instructions and buttons. */
-const props = defineProps<{ embedded?: boolean }>();
 const status = ref<PermissionStatus | null>(null);
 const emit = defineEmits<{ status: [status: PermissionStatus] }>();
 /* Lets Home move past the permission step once macOS reports it allowed. */
 watch(status, (next) => {
-  if (next) emit("status", next);
+  if (!next) return;
+  screenAllowed.value = next.screen !== "denied";
+  emit("status", next);
 });
 const asked = ref(false);
 let poll: ReturnType<typeof setInterval> | undefined;
@@ -58,22 +57,6 @@ onBeforeUnmount(() => clearInterval(poll));
       <div>
         <strong>Screen Recording is allowed.</strong>
         <p class="muted">Lockshot can see every app's windows when it captures.</p>
-      </div>
-    </div>
-
-    <div v-else-if="status.os === 'macos' && props.embedded" class="permission-steps">
-      <p class="muted">macOS hides other apps' windows from screenshots until you allow it. It's a one-time switch.</p>
-      <ol class="steps">
-        <li>Click <strong>Allow access</strong>. System Settings opens on the Screen Recording list (the first time, macOS may ask first: click <strong>Open System Settings</strong> in its prompt).</li>
-        <li>
-          Turn on the switch next to <strong>Lockshot</strong>.
-          <button class="link" @click="openSettings">Open System Settings</button>
-        </li>
-        <li>macOS applies the change after a relaunch, so click <strong>Relaunch Lockshot</strong>.</li>
-      </ol>
-      <div class="step-actions">
-        <button class="primary" @click="grant"><Icon name="shield" /> Allow access</button>
-        <button :class="{ primary: asked }" @click="relaunch()"><Icon name="reset" /> Relaunch Lockshot</button>
       </div>
     </div>
 

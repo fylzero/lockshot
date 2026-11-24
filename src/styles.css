@@ -2037,6 +2037,97 @@ button.tab-tool.update:hover:not(:disabled) {
 }
 
 /* Setup steps on Home */
+.perm-blocks {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+}
+
+.perm-block {
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.perm-block.ok {
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
+}
+
+.perm-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.perm-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-text);
+}
+
+.perm-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.perm-block.ok .perm-icon {
+  background: color-mix(in srgb, var(--good) 14%, transparent);
+  color: var(--good);
+}
+
+.perm-title {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.5rem;
+  min-width: 0;
+}
+
+.perm-tag {
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.welcome-step .perm-desc {
+  margin: 0.55rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.perm-steps {
+  margin: 0.55rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.perm-steps li + li {
+  margin-top: 0.15rem;
+}
+
+.perm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+  margin-top: auto;
+  padding-top: 0.8rem;
+  font-size: 0.88rem;
+}
 .step-actions {
   display: flex;
   gap: 0.5rem;

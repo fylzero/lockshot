@@ -6,7 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "./Icon.vue";
 import { api, errorMessage } from "../api";
-import { env, settings, showToast } from "../store";
+import { env, screenAllowed, settings, showToast } from "../store";
 import { formatAccelerator } from "../hotkeys";
 import { useTabs } from "../tabs";
 import { useUpdater } from "../composables/useUpdater";
@@ -160,7 +160,8 @@ function hint(label: string, accelerator?: string) {
       <button
         class="tab-tool"
         type="button"
-        :title="hint('Capture area', settings?.hotkeys.area)"
+        :title="screenAllowed ? hint('Capture area', settings?.hotkeys.area) : 'Allow Screen Recording to capture'"
+        :disabled="!screenAllowed"
         aria-label="Capture area"
         @click="capture('area')"
       >
@@ -169,7 +170,8 @@ function hint(label: string, accelerator?: string) {
       <button
         class="tab-tool"
         type="button"
-        :title="hint('Capture window', settings?.hotkeys.window)"
+        :title="screenAllowed ? hint('Capture window', settings?.hotkeys.window) : 'Allow Screen Recording to capture'"
+        :disabled="!screenAllowed"
         aria-label="Capture window"
         @click="capture('window')"
       >
@@ -178,7 +180,8 @@ function hint(label: string, accelerator?: string) {
       <button
         class="tab-tool"
         type="button"
-        :title="hint('Scrolling capture', settings?.hotkeys.scroll)"
+        :title="screenAllowed ? hint('Scrolling capture', settings?.hotkeys.scroll) : 'Allow Screen Recording to capture'"
+        :disabled="!screenAllowed"
         aria-label="Scrolling capture"
         @click="capture('scroll')"
       >
@@ -187,7 +190,8 @@ function hint(label: string, accelerator?: string) {
       <button
         class="tab-tool"
         type="button"
-        :title="hint('Capture screen', settings?.hotkeys.screen)"
+        :title="screenAllowed ? hint('Capture screen', settings?.hotkeys.screen) : 'Allow Screen Recording to capture'"
+        :disabled="!screenAllowed"
         aria-label="Capture screen"
         @click="capture('screen')"
       >

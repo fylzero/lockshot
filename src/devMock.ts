@@ -167,7 +167,8 @@ export function installMock() {
       case "request_screen_permission":
       case "request_input_permission":
         return {
-          screen: location.hash.includes("denied") ? "denied" : "granted",
+          /* #setup-denied: both off; #setup-denied-screen-ok: only Accessibility off. */
+          screen: location.hash.includes("denied") && !location.hash.includes("screen-ok") ? "denied" : "granted",
           os: "macos",
           wayland: false,
           input: location.hash.includes("denied") ? "denied" : "granted",

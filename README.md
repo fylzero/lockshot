@@ -254,7 +254,7 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings &
 
 ### Icons
 
-The app icon comes from `app-icon.png` in the repo root (1024×1024 recommended). The tray icons come from `scripts/icons/*.svg`. After changing either, regenerate everything:
+The app icon comes from `app-icon.png` in the repo root (1024×1024 recommended), except on macOS, where the Dock and Command-Tab icon comes from the squircle tile in `app-icon-macos.png` (made with `scripts/icons/fit-squircle.py`). The tray icons come from `scripts/icons/*.svg`. After changing either, regenerate everything:
 
 ```bash
 bun run icons
