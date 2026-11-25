@@ -76,6 +76,16 @@ pub fn update_settings(
         *settings::SCROLL_MAX_PAGES.start(),
         *settings::SCROLL_MAX_PAGES.end(),
     );
+    next.opacity = if next.opacity.is_finite() {
+        next.opacity.clamp(*settings::OPACITY.start(), *settings::OPACITY.end())
+    } else {
+        1.0
+    };
+    next.background_color = next.background_color.trim().to_ascii_lowercase();
+    if !settings::is_background_color(&next.background_color) {
+        next.background_color = String::new();
+    }
+    next.blur = next.blur.clamp(*settings::BLUR.start(), *settings::BLUR.end());
     if next.launch_at_login != current.launch_at_login {
         autostart::apply(&app, next.launch_at_login)?;
     }

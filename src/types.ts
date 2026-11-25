@@ -46,6 +46,12 @@ export interface Settings {
   /** Open every capture at 1:1, even one too big for the window. */
   alwaysActualSize: boolean;
   theme: ThemePreference;
+  /** How solid the background behind the image is, 0.05–1. */
+  opacity: number;
+  /** Blur radius behind that see-through background; 0 is off. */
+  blur: number;
+  /** The background behind the image as "#rrggbb"; empty is the theme's own. */
+  backgroundColor: string;
   onboarded: boolean;
   /** "permission", "hotkeys" or "tray" while setup is in progress. */
   setupStep: string;

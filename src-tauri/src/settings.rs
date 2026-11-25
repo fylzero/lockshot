@@ -112,6 +112,14 @@ pub struct Settings {
     /// capture opens at 1:1 if it fits and is shrunk to fit if it does not.
     pub always_actual_size: bool,
     pub theme: String,
+    /// How solid the background behind the image is, 0.05 to 1.
+    /// Lower shows the desktop through it.
+    pub opacity: f32,
+    /// Blur radius behind that see-through background, 0 (off) to 40.
+    pub blur: u32,
+    /// The background behind the image as "#rrggbb". Empty means the
+    /// theme's own: near-black, or white in the light theme.
+    pub background_color: String,
     /// Setup on Home is finished; until then the window opens at launch.
     pub onboarded: bool,
     /// Which setup step Home shows: "permission", "hotkeys" or "tray".
@@ -141,6 +149,9 @@ impl Default for Settings {
             resize_window_to_capture: true,
             always_actual_size: false,
             theme: "system".into(),
+            opacity: 0.3,
+            blur: 4,
+            background_color: String::new(),
             onboarded: false,
             setup_step: String::new(),
         }
@@ -189,6 +200,16 @@ pub const SCROLL_DIRECTIONS: [&str; 2] = ["down", "up"];
 pub const SCROLL_OUTPUTS: [&str; 3] = ["both", "image", "pages"];
 pub const SCROLL_DELAY_MS: std::ops::RangeInclusive<u32> = 100..=5000;
 pub const SCROLL_MAX_PAGES: std::ops::RangeInclusive<u32> = 2..=1000;
+pub const OPACITY: std::ops::RangeInclusive<f32> = 0.05..=1.0;
+pub const BLUR: std::ops::RangeInclusive<u32> = 0..=40;
+/// Empty, or a color as "#rrggbb".
+pub fn is_background_color(value: &str) -> bool {
+    value.is_empty()
+        || (value.len() == 7
+            && value.starts_with('#')
+            && value[1..].chars().all(|c| c.is_ascii_hexdigit()))
+}
+
 pub const SETUP_STEPS: [&str; 4] = ["", "permission", "hotkeys", "tray"];
 
 /**
@@ -239,6 +260,15 @@ pub fn from_json(raw: &str) -> Result<Settings, String> {
     }
     if !SCROLL_MAX_PAGES.contains(&settings.scroll_max_pages) {
         return Err("\"scrollMaxPages\" must be between 2 and 1000.".into());
+    }
+    if !OPACITY.contains(&settings.opacity) {
+        return Err("\"opacity\" must be between 0.05 and 1.".into());
+    }
+    if !BLUR.contains(&settings.blur) {
+        return Err("\"blur\" must be between 0 and 40.".into());
+    }
+    if !is_background_color(&settings.background_color) {
+        return Err("\"backgroundColor\" must be a color like \"#1e1e1e\", or empty for the theme's own.".into());
     }
     if !SETUP_STEPS.contains(&settings.setup_step.as_str()) {
         return Err("\"setupStep\" must be \"permission\", \"hotkeys\", \"tray\" or empty.".into());
@@ -371,6 +401,13 @@ mod tests {
         assert!(from_json(r#"{ "scrollDirection": "left" }"#).is_err());
         assert!(from_json(r#"{ "scrollDelayMs": 10 }"#).is_err());
         assert!(from_json(r#"{ "scrollMaxPages": 0 }"#).is_err());
+        assert!(from_json(r#"{ "opacity": 0 }"#).is_err());
+        assert!(from_json(r#"{ "opacity": 0.05 }"#).is_ok());
+        assert!(from_json(r#"{ "opacity": 1.5 }"#).is_err());
+        assert!(from_json(r#"{ "blur": 100 }"#).is_err());
+        assert!(from_json(r##"{ "backgroundColor": "#12" }"##).is_err());
+        assert!(from_json(r#"{ "backgroundColor": "red" }"#).is_err());
+        assert!(from_json(r##"{ "backgroundColor": "#1E1e1e" }"##).is_ok());
         assert!(from_json("[]").is_err());
     }
 }

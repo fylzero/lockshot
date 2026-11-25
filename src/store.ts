@@ -130,6 +130,14 @@ export function saveSettingsSoon() {
   }, 300);
 }
 
+/* The native blur lives on the window, so push it whenever the setting changes. */
+watch(
+  () => settings.value?.blur,
+  (blur) => {
+    if (blur !== undefined) void api.setWindowBlur(Math.round(blur)).catch(() => undefined);
+  },
+);
+
 watch(
   () => settings.value?.theme,
   (theme) => {

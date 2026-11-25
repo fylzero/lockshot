@@ -114,6 +114,9 @@ export function installMock() {
     resizeWindowToCapture: true,
     alwaysActualSize: false,
     theme: "system",
+    opacity: 0.3,
+    blur: 4,
+    backgroundColor: "",
     onboarded: !location.hash.includes("setup"),
     setupStep: "",
   };

@@ -10,9 +10,10 @@
   --bg-input: #0d1016;
   --bg-deep: #0c0e12;
   --bg-header: #161b24;
-  /* Neutral grey behind screenshots, without the theme's blue tint, so it
-     doesn't color how the capture looks. */
-  --editor-bg: #1e1e1e;
+  /* Behind screenshots, the same as Dispatch's terminal. Space-separated RGB
+     so Window opacity can be applied as rgb(var(--editor-rgb) / alpha). */
+  --editor-rgb: 8 9 12;
+  --editor-bg: rgb(var(--editor-rgb));
   --border: #2a3140;
   --text: #e8edf5;
   --text-soft: #9aa6b8;
@@ -50,7 +51,7 @@
   --bg-input: #ffffff;
   --bg-deep: #e9ecf0;
   --bg-header: #f0f2f5;
-  --editor-bg: #e6e6e6;
+  --editor-rgb: 255 255 255;
   --border: #d6dbe3;
   --text: #1c2330;
   --text-soft: #4b5566;
@@ -73,6 +74,12 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* The main window is transparent so the background behind the image can be
+   see-through; everything else in it paints its own background. */
+:root.main-window {
+  background: transparent;
 }
 
 html,
@@ -199,6 +206,12 @@ a {
   display: flex;
   flex-direction: column;
   height: 100%;
+  background: var(--bg);
+}
+
+/* An editor tab leaves the window clear for the stage's see-through background. */
+.shell:has(> .content.editor-active) {
+  background: transparent;
 }
 
 .spacer {
@@ -541,6 +554,44 @@ button.link.open-folder {
   cursor: pointer;
 }
 
+/* Background color in Appearance settings: a swatch and its hex over a hidden color input. */
+.color-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem 0.3rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
+.color-chip:hover {
+  border-color: color-mix(in srgb, currentColor 58%, transparent);
+}
+
+.color-chip-dot {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(var(--tint) / 0.25);
+}
+
+.color-chip code {
+  min-width: 4.2rem;
+  font-size: 12px;
+}
+
+.color-chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .size-dot {
   display: block;
   border-radius: 50%;
@@ -780,13 +831,23 @@ button.link.open-folder {
   display: grid;
   place-items: center;
   padding: 1.5rem;
-  background: var(--editor-bg);
+  background: rgb(var(--editor-rgb) / var(--editor-opacity, 1));
 }
 
 .canvas-wrap {
   position: relative;
   box-shadow: 0 18px 50px var(--shadow-strong);
   line-height: 0;
+}
+
+/*
+ * In a see-through window, macOS draws the window's own shadow around what is
+ * opaque, so a soft CSS shadow shows up as a dark outline where it fades out.
+ * Without it, the window shadow hugs the image and the zoom controls instead.
+ */
+.see-through .canvas-wrap,
+.see-through .zoom-controls {
+  box-shadow: none;
 }
 
 .canvas-wrap canvas {

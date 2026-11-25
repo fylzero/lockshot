@@ -14,14 +14,39 @@ import { env, saveSettingsSoon, settings, showToast, systemShortcuts } from "../
 import { ALL_FORMATS, FORMAT_INFO } from "../formats";
 import { DEFAULT_TEMPLATE, FILENAME_TOKENS, formatFilename } from "../filename";
 import { HOTKEY_ACTIONS, formatAccelerator, pcKeyboardPreset, systemClashes, systemPreset } from "../hotkeys";
-import { THEME_OPTIONS } from "../theme";
-import { fileManagerName, modKey } from "../platform";
+import { THEME_OPTIONS, resolvedTheme } from "../theme";
+import { fileManagerName, isMac, isWindows, modKey } from "../platform";
 import type { HotkeyAction } from "../types";
 
 /* A custom value from the JSON editor shows up in the list too. */
 const scrollPageLimits = computed(() =>
   [...new Set([50, 100, 200, 500, 1000, settings.value?.scrollMaxPages ?? 200])].sort((a, b) => a - b),
 );
+
+/* Window opacity and Background blur, as in Dispatch. */
+const DEFAULT_OPACITY = 0.3;
+const DEFAULT_BLUR = 4;
+/* macOS takes a blur radius; Windows only has its on/off Acrylic blur; Linux has none. */
+const blurSupported = isMac || isWindows;
+const blurHint = isMac
+  ? "Softens what shows through the background. Needs opacity below 100%."
+  : isWindows
+    ? "Turns on the Windows Acrylic blur behind the background. Windows has no strength setting, so any amount is the same."
+    : "Linux has no standard way to blur behind a window.";
+const blurLabel = computed(() => {
+  const blur = settings.value?.blur ?? 0;
+  if (!blurSupported || blur === 0) return "Off";
+  return isWindows ? "On" : `${Math.round(blur)}px`;
+});
+
+/* The theme's own background behind the image, from --editor-rgb in styles.css. */
+const themeBackground = computed(() => (resolvedTheme.value === "light" ? "#ffffff" : "#08090c"));
+const backgroundColor = computed(() => settings.value?.backgroundColor || themeBackground.value);
+function setBackgroundColor(value: string) {
+  if (!settings.value) return;
+  settings.value.backgroundColor = value;
+  saveSettingsSoon();
+}
 
 const SECTIONS = [
   { id: "general", label: "General", icon: "settings" },
@@ -515,6 +540,85 @@ const EDITOR_KEYS = [
                 @click="settings.theme = t.id; saveSettingsSoon()"
               >
                 {{ t.label }}
+              </button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Background color
+              <small>Behind the image in the editor. Reset goes back to the theme's own.</small>
+            </div>
+            <div class="row-control">
+              <label class="color-chip" title="Pick a color">
+                <span class="color-chip-dot" :style="{ background: backgroundColor }" />
+                <code>{{ settings.backgroundColor || "Theme" }}</code>
+                <input
+                  type="color"
+                  :value="backgroundColor"
+                  aria-label="Background color"
+                  @input="setBackgroundColor(($event.target as HTMLInputElement).value)"
+                />
+              </label>
+              <button
+                class="ghost"
+                title="Reset"
+                :disabled="!settings.backgroundColor"
+                @click="setBackgroundColor('')"
+              >
+                <Icon name="reset" />
+              </button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Window opacity
+              <small>How solid the background behind the image is. Lower shows the desktop through it.</small>
+            </div>
+            <div class="row-control">
+              <input
+                v-model.number="settings.opacity"
+                type="range"
+                min="0.05"
+                max="1"
+                step="0.05"
+                aria-label="Window opacity"
+                @input="saveSettingsSoon"
+              />
+              <span style="width: 2.5rem; text-align: right">{{ Math.round(settings.opacity * 100) }}%</span>
+              <button
+                class="ghost"
+                title="Reset"
+                :disabled="settings.opacity === DEFAULT_OPACITY"
+                @click="settings.opacity = DEFAULT_OPACITY; saveSettingsSoon()"
+              >
+                <Icon name="reset" />
+              </button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-label">
+              Background blur
+              <small>{{ blurHint }}</small>
+            </div>
+            <div class="row-control">
+              <input
+                v-model.number="settings.blur"
+                type="range"
+                min="0"
+                max="40"
+                step="1"
+                aria-label="Background blur"
+                :disabled="!blurSupported"
+                @input="saveSettingsSoon"
+              />
+              <span style="width: 2.5rem; text-align: right">{{ blurLabel }}</span>
+              <button
+                class="ghost"
+                title="Reset"
+                :disabled="!blurSupported || settings.blur === DEFAULT_BLUR"
+                @click="settings.blur = DEFAULT_BLUR; saveSettingsSoon()"
+              >
+                <Icon name="reset" />
               </button>
             </div>
           </div>

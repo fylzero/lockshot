@@ -7,6 +7,15 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.5.0",
+    date: "November 24, 2026",
+    notes: [
+      "The background behind the image in the editor is see-through by default, at 30% opacity with a 4px blur of what shows through, as in Dispatch. Change them with Window opacity and Background blur in Appearance settings. Windows uses its Acrylic blur, which is on or off; Linux has no blur.",
+      "Pick your own color for the background behind the image with Background color in Appearance settings. Reset goes back to the theme's.",
+      "The background behind the image is now the same near-black (or white in the light theme) as Dispatch's terminal.",
+    ],
+  },
+  {
     version: "1.4.5",
     date: "November 23, 2026",
     notes: [

@@ -22,6 +22,8 @@ if (label.startsWith("frame-")) {
   const { default: SaveToast } = await import("./SaveToast.vue");
   createApp(SaveToast).mount("#app");
 } else {
+  /* The main window is transparent so the background behind the image can be see-through. */
+  document.documentElement.classList.add("main-window");
   await import("./theme");
   const [{ default: App }, { router }] = await Promise.all([import("./App.vue"), import("./router")]);
   createApp(App).use(router).mount("#app");

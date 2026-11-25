@@ -1,6 +1,8 @@
 mod autostart;
+mod blur;
 mod capture;
 mod commands;
+mod corners;
 mod drag_out;
 mod export;
 mod frame;
@@ -149,6 +151,8 @@ pub fn run() {
             /* Spaces: the window opens on the one the user is on (macOS). */
             if let Some(main) = app.get_webview_window("main") {
                 platform::follow_active_space(&main);
+                /* The window is see-through behind the image (Window opacity in Settings). */
+                corners::round(&main);
             }
             /*
              * A bundled build starts menu-bar-only straight away; its .app
@@ -209,6 +213,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::update_settings,
+            blur::set_window_blur,
             commands::set_hotkey,
             commands::reset_hotkeys,
             commands::pause_hotkeys,

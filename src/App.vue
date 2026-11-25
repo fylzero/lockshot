@@ -48,6 +48,17 @@ function onWindowKeydown(event: KeyboardEvent) {
 const activeCapture = computed(() => (route.name === "editor" ? String(route.params.id) : null));
 const unlisten: UnlistenFn[] = [];
 
+/* Window opacity and Background color in Appearance settings, for the stage behind the image. */
+const shellStyle = computed(() => {
+  const style: Record<string, string | number> = { "--editor-opacity": settings.value?.opacity ?? 1 };
+  const hex = /^#([0-9a-f]{6})$/i.exec(settings.value?.backgroundColor ?? "")?.[1];
+  if (hex) {
+    const n = parseInt(hex, 16);
+    style["--editor-rgb"] = `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+  }
+  return style;
+});
+
 const OPENABLE = new RegExp(`\\.(${OPENABLE_EXTENSIONS.join("|")})$`, "i");
 const {
   status: updateStatus,
@@ -131,10 +142,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :class="{ 'see-through': (settings?.opacity ?? 1) < 1 }" :style="shellStyle">
     <TabBar />
 
-    <main v-if="settings" class="content">
+    <main v-if="settings" class="content" :class="{ 'editor-active': activeCapture }">
       <EditorView
         v-for="capture in captures"
         v-show="activeCapture === capture.id"

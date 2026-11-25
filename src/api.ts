@@ -15,6 +15,7 @@ import type {
 export const api = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
   updateSettings: (next: Settings) => invoke<Settings>("update_settings", { next }),
+  setWindowBlur: (radius: number) => invoke<void>("set_window_blur", { radius }),
   setHotkey: (action: HotkeyAction, accelerator: string) =>
     invoke<Settings>("set_hotkey", { action, accelerator }),
   resetHotkeys: () => invoke<Settings>("reset_hotkeys"),
