@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Turn this off with Check for updates automatically in General settings. Check for Updates… in the menu still works either way.",
       "Later is remembered across restarts. Automatic checks wait a day before asking about that version again, while Check for Updates… always asks.",
       "New Appearance defaults for the background behind the image: white at 5% opacity with a 30px blur, for a frosted-glass look with more contrast against the image. If you never changed these, you get the new look when you update; any you changed stay as they are. Reset on Background color now goes back to white.",
+      "On macOS, starting Capture Area (⌘4) no longer sometimes flashes the previous capture across the screen for an instant before the selection overlay appears.",
     ],
   },
   {
