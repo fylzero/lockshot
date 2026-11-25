@@ -14,7 +14,7 @@ const DOWNLOADS = [
   "macOS: download Lockshot-macos-arm64.dmg for Apple Silicon Macs, or run `brew install fylzero/tap/lockshot`.",
   "Linux: download Lockshot-linux-x64.AppImage, .deb, or .rpm for Intel and AMD PCs, or the Lockshot-linux-arm64 files for ARM.",
   "Windows: download Lockshot-windows-x64.exe for Intel and AMD PCs, or Lockshot-windows-arm64.exe for ARM.",
-  "The Windows installer isn't code-signed yet, so SmartScreen may warn: click More info, then Run anyway.",
+  "The Windows installer is signed by RazorKode LLC. If SmartScreen still warns about a new release, click More info, then Run anyway.",
 ];
 
 function configVersion(): string {

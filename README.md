@@ -124,7 +124,7 @@ On first launch, Lockshot asks for **Screen Recording** permission (*System Sett
 
 Run the installer. It installs Lockshot for your user account without asking for administrator rights, and **Check for Updates…** in the tray menu keeps it current. On ARM PCs, like Snapdragon laptops, use [Lockshot-windows-arm64.exe](https://github.com/fylzero/lockshot/releases/latest/download/Lockshot-windows-arm64.exe) instead.
 
-The installer isn't code-signed yet, so Windows SmartScreen may say **Windows protected your PC**. Click **More info**, then **Run anyway**.
+The installer is signed by RazorKode LLC. Right after a new release, Windows SmartScreen may still say **Windows protected your PC** until the release builds up downloads. If it does, click **More info**, then **Run anyway**.
 
 Windows needs no capture permission. Windows 11 sends PrtSc to the Snipping Tool until you turn off *Settings › Accessibility › Keyboard › Use the Print screen key to open screen capture*. HEIC export isn't available on Windows.
 
