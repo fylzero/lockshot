@@ -40,7 +40,7 @@ import { modKey } from "../platform";
 
 /* Arrow, the most used, gets its own button, left of the shape tools. */
 const ARROW_TOOL = { id: "arrow" as Tool, label: "Arrow", key: "A" };
-/* The other drawing tools share one split button that shows whichever is picked. */
+/* The other drawing tools share one button that shows whichever is picked and opens a menu of the rest. */
 const SHAPE_TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: "line", label: "Line", key: "L" },
   { id: "rect", label: "Rectangle", key: "R" },
@@ -208,10 +208,36 @@ const opening = ref(false);
 
 /** The stage's padding on both sides, which fit() also leaves clear. */
 const STAGE_PAD = 48;
+/*
+ * The toolbars float over the stage: the tools in a column down the left, the
+ * export controls along the top right. The image keeps this far clear of them.
+ */
+const TOOLBAR_GAP = 12;
+const toolbar = ref<HTMLDivElement | null>(null);
+const toolIsland = ref<HTMLDivElement | null>(null);
+/** Where the tool column ends on the left and the export bar at the top, in CSS pixels. */
+const toolbarEdges = ref({ left: 0, top: 0 });
+/** How much more room the left and top of the stage take than the other sides. */
+const extraLeft = () => toolbarEdges.value.left + TOOLBAR_GAP - STAGE_PAD / 2;
+const extraTop = () => toolbarEdges.value.top + TOOLBAR_GAP - STAGE_PAD / 2;
+
+function measureToolbars() {
+  const bar = toolbar.value;
+  const island = toolIsland.value;
+  const exportBar = bar?.querySelector<HTMLElement>(".export-bar");
+  if (!bar || !island || !exportBar) return;
+  toolbarEdges.value = {
+    left: bar.offsetLeft + island.offsetLeft + island.offsetWidth,
+    top: bar.offsetTop + exportBar.offsetTop + exportBar.offsetHeight,
+  };
+}
 
 /** The space the image needs at 1:1, in CSS pixels, with the stage's padding. */
 function actualSizeNeed() {
-  return { w: Math.ceil(view.value.w / dpr) + STAGE_PAD, h: Math.ceil(view.value.h / dpr) + STAGE_PAD };
+  return {
+    w: Math.ceil(view.value.w / dpr) + STAGE_PAD + extraLeft(),
+    h: Math.ceil(view.value.h / dpr) + STAGE_PAD + extraTop(),
+  };
 }
 
 /** The stage's size, scrollbars included, so a scrollbar never counts as chrome. */
@@ -336,13 +362,31 @@ function cancelCrop() {
   tool.value = toolBeforeCrop;
 }
 
+/* Room the Apply / Cancel pair needs inside the crop box, in CSS pixels. */
+const CROP_ACTIONS = { w: 150, h: 40 };
+
+/**
+ * Where Apply and Cancel sit: inside the crop box's lower-right corner, or
+ * just below it when the box is too small to hold them.
+ */
+const cropActionsStyle = computed(() => {
+  const r = tool.value === "crop" ? pendingCrop.value : null;
+  if (!r || r.w * cssScale.value < 4 || r.h * cssScale.value < 4) return null;
+  const right = (r.x + r.w) * cssScale.value;
+  const bottom = (r.y + r.h) * cssScale.value;
+  const fits = r.w * cssScale.value >= CROP_ACTIONS.w && r.h * cssScale.value >= CROP_ACTIONS.h;
+  return fits
+    ? { left: `${right - 8}px`, top: `${bottom - 8}px`, transform: "translate(-100%, -100%)" }
+    : { left: `${right}px`, top: `${bottom + 8}px`, transform: "translateX(-100%)" };
+});
+
 /* ---- Zoom ---- */
 
 function fit() {
   /* A hidden tab's stage measures 0; it refits when it becomes visible. */
   if (!stage.value || !view.value.w || !stage.value.clientWidth) return;
-  const availW = Math.max(50, stage.value.clientWidth - STAGE_PAD) * dpr;
-  const availH = Math.max(50, stage.value.clientHeight - STAGE_PAD) * dpr;
+  const availW = Math.max(50, stage.value.clientWidth - STAGE_PAD - extraLeft()) * dpr;
+  const availH = Math.max(50, stage.value.clientHeight - STAGE_PAD - extraTop()) * dpr;
   zoom.value = Math.min(1, availW / view.value.w, availH / view.value.h);
 }
 
@@ -931,6 +975,13 @@ function toggleMenu(menu: NonNullable<typeof openMenu.value>) {
   openMenu.value = openMenu.value === menu ? null : menu;
 }
 
+/* The drawing-tools and redact buttons also pick the tool they show, so one
+   click can go straight to drawing without choosing from the menu. */
+function pickAndToggle(next: Tool, menu: "shape" | "redact") {
+  tool.value = next;
+  toggleMenu(menu);
+}
+
 /* Clicking the toolbar mustn't take focus from the text box being typed in,
    or it would close before the new color or size reaches it. The file name
    field still needs its own clicks. */
@@ -1159,9 +1210,14 @@ onMounted(() => {
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("pointerdown", onWindowPointerDown, true);
   resizeObserver = new ResizeObserver(() => {
+    /* The tool column grows and shrinks as tools come and go. */
+    measureToolbars();
     if (fitMode.value) fit();
   });
   if (stage.value) resizeObserver.observe(stage.value);
+  if (toolIsland.value) resizeObserver.observe(toolIsland.value);
+  const exportEl = toolbar.value?.querySelector(".export-bar");
+  if (exportEl) resizeObserver.observe(exportEl);
 });
 
 watch(stage, (el, old) => {
@@ -1179,251 +1235,231 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="editor">
-    <div class="toolbar" @mousedown="onToolbarMouseDown">
-      <div class="tool-group">
-        <button
-          class="tool"
-          :class="{ active: tool === ARROW_TOOL.id }"
-          :title="`${ARROW_TOOL.label} (${ARROW_TOOL.key})`"
-          :aria-label="ARROW_TOOL.label"
-          @click="pickTool(ARROW_TOOL.id)"
-        >
-          <Icon :name="ARROW_TOOL.id" />
-        </button>
-        <div class="tool-menu" data-menu="shape">
-          <div class="split" :class="{ active: tool === shapeTool }">
+    <div ref="toolbar" class="toolbar" @mousedown="onToolbarMouseDown">
+      <div ref="toolIsland" class="tool-island">
+        <div class="tool-group">
+          <button
+            class="tool"
+            :class="{ active: tool === ARROW_TOOL.id }"
+            :title="`${ARROW_TOOL.label} (${ARROW_TOOL.key})`"
+            :aria-label="ARROW_TOOL.label"
+            @click="pickTool(ARROW_TOOL.id)"
+          >
+            <Icon :name="ARROW_TOOL.id" />
+          </button>
+          <div class="tool-menu" data-menu="shape">
             <button
-              class="tool split-main"
-              :title="`${currentShapeTool.label} (${currentShapeTool.key})`"
-              :aria-label="currentShapeTool.label"
-              @click="pickTool(shapeTool)"
-            >
-              <Icon :name="shapeTool" />
-            </button>
-            <button
-              class="tool split-arrow"
-              :class="{ open: openMenu === 'shape' }"
-              title="More drawing tools"
-              aria-label="More drawing tools"
+              class="tool menu-trigger"
+              :class="{ active: tool === shapeTool, open: openMenu === 'shape' }"
+              :title="`Drawing tools: ${currentShapeTool.label}`"
+              aria-label="Drawing tools"
               aria-haspopup="menu"
               :aria-expanded="openMenu === 'shape'"
-              @click="toggleMenu('shape')"
+              @click="pickAndToggle(shapeTool, 'shape')"
             >
+              <Icon :name="shapeTool" />
               <Icon name="chevron" class="chevron" />
             </button>
+            <div v-if="openMenu === 'shape'" class="menu-pop" role="menu">
+              <button
+                v-for="t in SHAPE_TOOLS"
+                :key="t.id"
+                class="menu-item"
+                :class="{ active: tool === t.id }"
+                role="menuitemradio"
+                :aria-checked="tool === t.id"
+                @click="pickTool(t.id)"
+              >
+                <Icon :name="t.id" />
+                <span>{{ t.label }}</span>
+                <kbd>{{ t.key }}</kbd>
+              </button>
+            </div>
           </div>
-          <div v-if="openMenu === 'shape'" class="menu-pop" role="menu">
+          <template v-for="t in OTHER_TOOLS" :key="t.id">
             <button
-              v-for="t in SHAPE_TOOLS"
-              :key="t.id"
-              class="menu-item"
+              class="tool"
               :class="{ active: tool === t.id }"
-              role="menuitemradio"
-              :aria-checked="tool === t.id"
+              :title="`${t.label} (${t.key})`"
+              :aria-label="t.label"
               @click="pickTool(t.id)"
             >
               <Icon :name="t.id" />
-              <span>{{ t.label }}</span>
-              <kbd>{{ t.key }}</kbd>
             </button>
-          </div>
-        </div>
-        <template v-for="t in OTHER_TOOLS" :key="t.id">
-          <button
-            class="tool"
-            :class="{ active: tool === t.id }"
-            :title="`${t.label} (${t.key})`"
-            :aria-label="t.label"
-            @click="pickTool(t.id)"
-          >
-            <Icon :name="t.id" />
-          </button>
-          <div v-if="t.id === 'text'" class="tool-menu" data-menu="redact">
-            <div class="split" :class="{ active: tool === 'blur' }">
+            <div v-if="t.id === 'text'" class="tool-menu" data-menu="redact">
               <button
-                class="tool split-main"
-                :title="`${currentRedact.label} (${REDACT_TOOL.key})`"
-                :aria-label="`Redact: ${currentRedact.label}`"
-                @click="pickTool('blur')"
+                class="tool menu-trigger"
+                :class="{ active: tool === 'blur', open: openMenu === 'redact' }"
+                :title="`Redact: ${currentRedact.label} (${REDACT_TOOL.key})`"
+                aria-label="Redact"
+                aria-haspopup="menu"
+                :aria-expanded="openMenu === 'redact'"
+                @click="pickAndToggle('blur', 'redact')"
               >
                 <Icon v-if="redactMode === 'pixelate'" name="blur" />
                 <span v-else class="redact-sample" :class="`redact-${redactMode}`" />
-              </button>
-              <button
-                class="tool split-arrow"
-                :class="{ open: openMenu === 'redact' }"
-                title="More redact styles"
-                aria-label="More redact styles"
-                aria-haspopup="menu"
-                :aria-expanded="openMenu === 'redact'"
-                @click="toggleMenu('redact')"
-              >
                 <Icon name="chevron" class="chevron" />
               </button>
+              <div v-if="openMenu === 'redact'" class="menu-pop" role="menu">
+                <button
+                  v-for="m in REDACT_MODES"
+                  :key="m.id"
+                  class="menu-item"
+                  :class="{ active: tool === 'blur' && redactMode === m.id }"
+                  role="menuitemradio"
+                  :aria-checked="tool === 'blur' && redactMode === m.id"
+                  @click="pickRedact(m.id)"
+                >
+                  <Icon v-if="m.id === 'pixelate'" name="blur" />
+                  <span v-else class="redact-sample" :class="`redact-${m.id}`" />
+                  <span>{{ m.label }}</span>
+                </button>
+              </div>
             </div>
-            <div v-if="openMenu === 'redact'" class="menu-pop" role="menu">
+          </template>
+        </div>
+
+        <template v-if="tool !== 'crop'">
+          <span class="divider" />
+          <div class="tool-group">
+            <div class="tool-menu" data-menu="color">
               <button
-                v-for="m in REDACT_MODES"
-                :key="m.id"
-                class="menu-item"
-                :class="{ active: tool === 'blur' && redactMode === m.id }"
-                role="menuitemradio"
-                :aria-checked="tool === 'blur' && redactMode === m.id"
-                @click="pickRedact(m.id)"
+                class="tool menu-trigger"
+                :class="{ open: openMenu === 'color' }"
+                :title="`Color ${color}`"
+                aria-label="Color"
+                aria-haspopup="menu"
+                :aria-expanded="openMenu === 'color'"
+                @click="toggleMenu('color')"
               >
-                <Icon v-if="m.id === 'pixelate'" name="blur" />
-                <span v-else class="redact-sample" :class="`redact-${m.id}`" />
-                <span>{{ m.label }}</span>
+                <span class="swatch-dot" :style="{ background: color }" />
+                <Icon name="chevron" class="chevron" />
               </button>
+              <div v-if="openMenu === 'color'" class="menu-pop swatch-grid" role="menu">
+                <button
+                  v-for="c in COLORS"
+                  :key="c"
+                  class="swatch"
+                  :class="{ active: color === c }"
+                  :style="{ background: c }"
+                  :title="c"
+                  :aria-label="`Color ${c}`"
+                  @click="pickColor(c)"
+                />
+                <label class="swatch swatch-custom" :class="{ active: !COLORS.includes(color) }" title="Custom color">
+                  <input type="color" :value="color" @input="pickColor(($event.target as HTMLInputElement).value, false)" />
+                </label>
+              </div>
+            </div>
+
+            <div class="tool-menu" data-menu="size">
+              <button
+                class="tool menu-trigger"
+                :class="{ open: openMenu === 'size' }"
+                :title="`Size: ${SIZES[sizeIndex].label}`"
+                aria-label="Size"
+                aria-haspopup="menu"
+                :aria-expanded="openMenu === 'size'"
+                @click="toggleMenu('size')"
+              >
+                <span class="size-slot">
+                  <span class="size-dot" :style="{ width: `${4 + sizeIndex * 2.5}px`, height: `${4 + sizeIndex * 2.5}px` }" />
+                </span>
+                <Icon name="chevron" class="chevron" />
+              </button>
+              <div v-if="openMenu === 'size'" class="menu-pop" role="menu">
+                <button
+                  v-for="(s, i) in SIZES"
+                  :key="s.label"
+                  class="menu-item"
+                  :class="{ active: sizeIndex === i }"
+                  role="menuitemradio"
+                  :aria-checked="sizeIndex === i"
+                  @click="pickSize(i)"
+                >
+                  <span class="size-slot">
+                    <span class="size-dot" :style="{ width: `${4 + i * 2.5}px`, height: `${4 + i * 2.5}px` }" />
+                  </span>
+                  <span>{{ s.label }}</span>
+                  <kbd>{{ i + 1 }}</kbd>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="showOutline" class="tool-menu" data-menu="outline">
+              <button
+                class="tool menu-trigger"
+                :class="{ open: openMenu === 'outline' }"
+                :title="`Text outline: ${OUTLINES.find((o) => o.id === textOutline)!.label}`"
+                aria-label="Text outline"
+                aria-haspopup="menu"
+                :aria-expanded="openMenu === 'outline'"
+                @click="toggleMenu('outline')"
+              >
+                <span class="outline-sample" :class="`outline-${textOutline}`" :style="{ color }">A</span>
+                <Icon name="chevron" class="chevron" />
+              </button>
+              <div v-if="openMenu === 'outline'" class="menu-pop" role="menu">
+                <span class="menu-label">Text outline</span>
+                <button
+                  v-for="o in OUTLINES"
+                  :key="o.id"
+                  class="menu-item"
+                  :class="{ active: textOutline === o.id }"
+                  role="menuitemradio"
+                  :aria-checked="textOutline === o.id"
+                  @click="pickOutline(o.id)"
+                >
+                  <span class="outline-sample" :class="`outline-${o.id}`" :style="{ color }">A</span>
+                  <span>{{ o.label }}</span>
+                </button>
+              </div>
             </div>
           </div>
         </template>
-      </div>
 
-      <template v-if="tool === 'crop'">
         <span class="divider" />
         <div class="tool-group">
-          <button class="primary crop-apply" :disabled="!pendingCrop" title="Apply the crop (Enter)" @click="applyCrop">
-            <Icon name="check" />
-            Apply
+          <button class="tool" :disabled="!past.length" :title="`Undo (${modKey}Z)`" aria-label="Undo" @click="undo">
+            <Icon name="undo" />
           </button>
-          <button class="ghost" title="Leave the crop as it was (Esc)" @click="cancelCrop">Cancel</button>
+          <button class="tool" :disabled="!future.length" :title="`Redo (${modKey}⇧Z)`" aria-label="Redo" @click="redo">
+            <Icon name="redo" />
+          </button>
+          <button
+            v-if="selectedId != null"
+            class="tool"
+            title="Delete selected (Delete)"
+            aria-label="Delete selected"
+            @click="deleteSelected"
+          >
+            <Icon name="trash" />
+          </button>
+          <button
+            v-if="crop"
+            class="tool"
+            title="Remove the crop"
+            aria-label="Remove the crop"
+            @click="commit(shapes, null); pendingCrop = null"
+          >
+            <Icon name="cropOff" />
+          </button>
+          <button
+            v-if="shapes.length || crop"
+            class="tool"
+            title="Remove every annotation and the crop"
+            aria-label="Reset"
+            @click="clearAll"
+          >
+            <Icon name="reset" />
+          </button>
         </div>
-      </template>
-
-      <template v-else>
-        <span class="divider" />
-        <div class="tool-group">
-          <div class="tool-menu" data-menu="color">
-            <button
-              class="tool menu-trigger"
-              :class="{ open: openMenu === 'color' }"
-              :title="`Color ${color}`"
-              aria-label="Color"
-              aria-haspopup="menu"
-              :aria-expanded="openMenu === 'color'"
-              @click="toggleMenu('color')"
-            >
-              <span class="swatch-dot" :style="{ background: color }" />
-              <Icon name="chevron" class="chevron" />
-            </button>
-            <div v-if="openMenu === 'color'" class="menu-pop swatch-grid" role="menu">
-              <button
-                v-for="c in COLORS"
-                :key="c"
-                class="swatch"
-                :class="{ active: color === c }"
-                :style="{ background: c }"
-                :title="c"
-                :aria-label="`Color ${c}`"
-                @click="pickColor(c)"
-              />
-              <label class="swatch swatch-custom" :class="{ active: !COLORS.includes(color) }" title="Custom color">
-                <input type="color" :value="color" @input="pickColor(($event.target as HTMLInputElement).value, false)" />
-              </label>
-            </div>
-          </div>
-
-          <div class="tool-menu" data-menu="size">
-            <button
-              class="tool menu-trigger"
-              :class="{ open: openMenu === 'size' }"
-              :title="`Size: ${SIZES[sizeIndex].label}`"
-              aria-label="Size"
-              aria-haspopup="menu"
-              :aria-expanded="openMenu === 'size'"
-              @click="toggleMenu('size')"
-            >
-              <span class="size-slot">
-                <span class="size-dot" :style="{ width: `${4 + sizeIndex * 2.5}px`, height: `${4 + sizeIndex * 2.5}px` }" />
-              </span>
-              <Icon name="chevron" class="chevron" />
-            </button>
-            <div v-if="openMenu === 'size'" class="menu-pop" role="menu">
-              <button
-                v-for="(s, i) in SIZES"
-                :key="s.label"
-                class="menu-item"
-                :class="{ active: sizeIndex === i }"
-                role="menuitemradio"
-                :aria-checked="sizeIndex === i"
-                @click="pickSize(i)"
-              >
-                <span class="size-slot">
-                  <span class="size-dot" :style="{ width: `${4 + i * 2.5}px`, height: `${4 + i * 2.5}px` }" />
-                </span>
-                <span>{{ s.label }}</span>
-                <kbd>{{ i + 1 }}</kbd>
-              </button>
-            </div>
-          </div>
-
-          <div v-if="showOutline" class="tool-menu" data-menu="outline">
-            <button
-              class="tool menu-trigger"
-              :class="{ open: openMenu === 'outline' }"
-              :title="`Text outline: ${OUTLINES.find((o) => o.id === textOutline)!.label}`"
-              aria-label="Text outline"
-              aria-haspopup="menu"
-              :aria-expanded="openMenu === 'outline'"
-              @click="toggleMenu('outline')"
-            >
-              <span class="outline-sample" :class="`outline-${textOutline}`" :style="{ color }">A</span>
-              <Icon name="chevron" class="chevron" />
-            </button>
-            <div v-if="openMenu === 'outline'" class="menu-pop" role="menu">
-              <span class="menu-label">Text outline</span>
-              <button
-                v-for="o in OUTLINES"
-                :key="o.id"
-                class="menu-item"
-                :class="{ active: textOutline === o.id }"
-                role="menuitemradio"
-                :aria-checked="textOutline === o.id"
-                @click="pickOutline(o.id)"
-              >
-                <span class="outline-sample" :class="`outline-${o.id}`" :style="{ color }">A</span>
-                <span>{{ o.label }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <span class="divider" />
-      <div class="tool-group">
-        <button class="tool" :disabled="!past.length" :title="`Undo (${modKey}Z)`" aria-label="Undo" @click="undo">
-          <Icon name="undo" />
-        </button>
-        <button class="tool" :disabled="!future.length" :title="`Redo (${modKey}⇧Z)`" aria-label="Redo" @click="redo">
-          <Icon name="redo" />
-        </button>
-        <button
-          v-if="selectedId != null"
-          class="tool"
-          title="Delete selected (Delete)"
-          aria-label="Delete selected"
-          @click="deleteSelected"
-        >
-          <Icon name="trash" />
-        </button>
-        <button v-if="crop" class="ghost" title="Remove the crop" @click="commit(shapes, null); pendingCrop = null">
-          Clear crop
-        </button>
-        <button
-          v-if="shapes.length || crop"
-          class="ghost"
-          title="Remove every annotation and the crop"
-          @click="clearAll"
-        >
-          Reset
-        </button>
       </div>
 
       <ExportBar ref="exportBar" v-model:format="exportFormat" :capture="capture" :render="renderPng" :ready="!!image" @copy="copy()" />
     </div>
 
-    <div ref="stage" class="stage" @wheel="onWheel">
+    <div ref="stage" class="stage" :style="{ paddingLeft: `${toolbarEdges.left + TOOLBAR_GAP}px`, paddingTop: `${toolbarEdges.top + TOOLBAR_GAP}px` }" @wheel="onWheel">
       <p v-if="loadError" class="muted">{{ loadError }}</p>
       <div
         v-else-if="image"
@@ -1440,6 +1476,14 @@ onBeforeUnmount(() => {
           @pointercancel="onPointerUp"
           @dblclick="onDoubleClick"
         />
+        <!-- Apply and Cancel ride in the crop box's lower-right corner. -->
+        <div v-if="cropActionsStyle" class="crop-actions" :style="cropActionsStyle" @pointerdown.stop>
+          <button class="primary" title="Apply the crop (Enter)" @click="applyCrop">
+            <Icon name="check" />
+            Apply
+          </button>
+          <button title="Leave the crop as it was (Esc)" @click="cancelCrop">Cancel</button>
+        </div>
         <template v-if="editing">
           <textarea
             ref="textArea"

@@ -11,8 +11,13 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 24, 2026",
     notes: [
       "The background behind the image in the editor is see-through by default, at 30% opacity with a 4px blur of what shows through, as in Dispatch. Change them with Window opacity and Background blur in Appearance settings. Windows uses its Acrylic blur, which is on or off; Linux has no blur.",
-      "Pick your own color for the background behind the image with Background color in Appearance settings. Reset goes back to the theme's.",
       "The background behind the image is now the same near-black (or white in the light theme) as Dispatch's terminal.",
+      "Pick your own color for the background behind the image with Background color in Appearance settings. Reset goes back to the theme's.",
+      "The editor's toolbar is now two small floating panels over the image area, like the zoom controls at the bottom: the tools in a column down the left side, and the file name and format along the top right. Their menus open to the side, and Clear crop and Reset are icon buttons (hover for their names).",
+      "The drawing tools and the redact styles are each one button now, like color and size: clicking it picks the one it shows, so you can start drawing right away, and opens a menu to choose another. Keyboard shortcuts still switch tools directly.",
+      "Save, Save As, and Copy to clipboard moved into a ⋮ menu beside the file name. Their shortcuts still work, and Enter in the file name still saves.",
+      "While cropping, Apply and Cancel sit inside the crop box's lower-right corner, or just below a box too small to hold them.",
+      "The file icon in the lower-right corner of the editor is a little larger, so it's easier to grab and drag out.",
     ],
   },
   {

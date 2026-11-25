@@ -479,21 +479,40 @@ button.link.open-folder {
 /* ---- Editor ---- */
 
 .editor {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
+/* Two islands float over the stage, like the zoom controls at the bottom:
+   the tools in a column down the left, the file name and Save along the top
+   right. The space between them lets clicks through to the stage. */
 .toolbar {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.tool-island,
+.toolbar .export-bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 0.35rem;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--border);
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg-raised);
-  flex-shrink: 0;
+  box-shadow: 0 6px 18px var(--shadow);
+  pointer-events: auto;
 }
 
 .tool-group {
@@ -507,6 +526,34 @@ button.link.open-folder {
   height: 1.4rem;
   margin: 0 0.3rem;
   background: var(--border);
+}
+
+/* The tool column: one tool per row, menu triggers as wide as the column,
+   and their menus opening to the right. */
+.tool-island {
+  flex-direction: column;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.tool-island .tool-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.tool-island .tool {
+  justify-content: center;
+}
+
+.tool-island .divider {
+  width: auto;
+  height: 1px;
+  margin: 0.15rem 0.2rem;
+}
+
+.tool-island .menu-pop {
+  top: 0;
+  left: calc(100% + 0.6rem);
 }
 
 .tool {
@@ -618,61 +665,6 @@ button.link.open-folder {
 
 .tool.menu-trigger.open:not(.active) {
   background: var(--bg-hover);
-}
-
-/*
- * Split button: the left half picks the tool, the chevron opens its menu.
- * The pair shares one outline, with a thin line between the halves; each
- * half lights up on its own when hovered.
- */
-.split {
-  display: flex;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  overflow: hidden;
-  color: var(--text-soft);
-}
-
-.split:hover {
-  border-color: color-mix(in srgb, currentColor 40%, transparent);
-}
-
-.split.active {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  color: var(--accent-text);
-}
-
-.split .tool,
-.split .tool:hover:not(:disabled),
-.split .tool.active,
-.split .tool.active:hover:not(:disabled) {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-}
-
-.split .tool:hover:not(:disabled),
-.split .tool.split-arrow.open {
-  background: color-mix(in srgb, currentColor 14%, transparent);
-}
-
-.split .tool.split-arrow {
-  padding-left: 0.15rem;
-  padding-right: 0.15rem;
-  border-left: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-}
-
-.split .tool.split-arrow:hover:not(:disabled),
-.split .tool.split-arrow.open {
-  border-left: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-}
-
-.toolbar .split .tool.split-arrow svg.chevron {
-  width: 0.7rem;
-  height: 0.7rem;
-  opacity: 0.7;
 }
 
 .swatch-dot {
@@ -818,11 +810,6 @@ button.link.open-folder {
   height: 1.6rem;
 }
 
-.crop-apply svg {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
 .stage {
   position: relative;
   flex: 1;
@@ -846,7 +833,9 @@ button.link.open-folder {
  * Without it, the window shadow hugs the image and the zoom controls instead.
  */
 .see-through .canvas-wrap,
-.see-through .zoom-controls {
+.see-through .zoom-controls,
+.see-through .tool-island,
+.see-through .toolbar .export-bar {
   box-shadow: none;
 }
 
@@ -878,6 +867,32 @@ button.link.open-folder {
 .text-entry::selection {
   color: var(--text-color);
   background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Apply and Cancel, floating in the crop box. */
+.crop-actions {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.crop-actions button {
+  height: 1.85rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.85rem;
+}
+
+.crop-actions svg {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .text-resize {
@@ -949,8 +964,8 @@ button.link.open-folder {
   right: 0.75rem;
   bottom: 0.75rem;
   z-index: 2;
-  width: 2.2rem;
-  height: 2.64rem;
+  width: 2.575rem;
+  height: 3.09rem;
 }
 
 .file-badge svg {
@@ -1097,9 +1112,15 @@ button.link.open-folder {
 }
 
 .export-actions {
+  position: relative;
   display: flex;
-  gap: 0.4rem;
   flex-shrink: 0;
+}
+
+.menu-pop.actions-pop {
+  left: auto;
+  right: 0;
+  min-width: 13rem;
 }
 
 /* ---- Settings ---- */
@@ -1993,58 +2014,38 @@ button.tab-tool.update:hover:not(:disabled) {
 
 .export-bar .export-name input,
 .export-bar .export-name .format-trigger,
-.export-bar .export-actions button {
+.export-bar .export-actions > button {
   height: var(--export-row);
   box-sizing: border-box;
-}
-
-.export-bar .export-actions button {
-  padding-top: 0;
-  padding-bottom: 0;
-  font-size: 0.85rem;
 }
 
 .export-bar .export-name input {
   font-size: 0.82rem;
 }
 
-/* Save is text only, the one labelled button, padded so it doesn't look cramped. */
-.export-bar .export-actions button.primary {
-  padding-left: 0.95rem;
-  padding-right: 0.95rem;
-}
-
-/* Copy and Save As (an arrow arcing out of a box) are square icon buttons beside the labelled Save. */
-.export-bar .export-actions button.icon-only {
+/* The ⋮ button that opens Save, Save As and Copy: square, like the tools. */
+.export-bar .export-actions > button.icon-only {
   width: var(--export-row);
   padding: 0;
   justify-content: center;
 }
 
-.export-bar .export-actions button.icon-only svg {
+.export-bar .export-actions > button.icon-only svg {
   width: 1.1rem;
   height: 1.1rem;
 }
 
-/* The editor toolbar keeps one height whether or not Reset and Clear crop
-   are showing: text buttons match the icon tools. */
+.export-bar .export-actions > button.open {
+  background: var(--bg-hover);
+}
+
+/* Every tool is one height, so rows in the tool column line up. */
 .toolbar {
   --tool-height: 1.95rem;
-  min-height: calc(var(--tool-height) + 0.8rem + 1px);
 }
 
-.toolbar .tool,
-.toolbar button.ghost,
-.toolbar button.crop-apply {
+.toolbar .tool {
   height: var(--tool-height);
-}
-
-/* Apply and Cancel sit side by side, so they match in height and text size. */
-.toolbar button.ghost,
-.toolbar button.crop-apply {
-  padding-top: 0;
-  padding-bottom: 0;
-  font-size: 0.85rem;
 }
 
 /* The tab strip scrolls sideways when tabs overflow, but never shows a

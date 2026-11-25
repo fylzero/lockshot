@@ -94,25 +94,28 @@ async function saveAs() {
   }
 }
 
-/* ---- Format menu, styled like the toolbar's menus ---- */
+/* ---- The format menu and the ⋮ menu, styled like the toolbar's menus ---- */
 
-const formatOpen = ref(false);
+type Menu = "format" | "actions";
+const openMenu = ref<Menu | null>(null);
 const formatMenu = ref<HTMLElement | null>(null);
+const actionsMenu = ref<HTMLElement | null>(null);
 
 function closeOnOutside(event: PointerEvent) {
-  if (!formatMenu.value?.contains(event.target as Node)) setFormatOpen(false);
+  const menu = openMenu.value === "format" ? formatMenu.value : actionsMenu.value;
+  if (!menu?.contains(event.target as Node)) setMenu(null);
 }
 
 function closeOnEscape(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
   /* Don't let the editor also treat this Escape as "deselect" or "cancel crop". */
   event.stopPropagation();
-  setFormatOpen(false);
+  setMenu(null);
 }
 
-function setFormatOpen(open: boolean) {
-  formatOpen.value = open;
-  if (open) {
+function setMenu(menu: Menu | null) {
+  openMenu.value = menu;
+  if (menu) {
     window.addEventListener("pointerdown", closeOnOutside, true);
     window.addEventListener("keydown", closeOnEscape, true);
   } else {
@@ -121,13 +124,23 @@ function setFormatOpen(open: boolean) {
   }
 }
 
+function toggleMenu(menu: Menu) {
+  setMenu(openMenu.value === menu ? null : menu);
+}
+
 function pickFormat(next: ExportFormat) {
   if (!supported(next)) return;
   format.value = next;
-  setFormatOpen(false);
+  setMenu(null);
 }
 
-onBeforeUnmount(() => setFormatOpen(false));
+/** Close the ⋮ menu, then do what was picked. */
+function runAction(action: () => unknown) {
+  setMenu(null);
+  void action();
+}
+
+onBeforeUnmount(() => setMenu(null));
 
 /*
  * The editor toolbar cancels mouse presses so focus stays in a text
@@ -158,17 +171,17 @@ defineExpose({ save, saveAs });
         <div ref="formatMenu" class="format-menu">
           <button
             class="format-trigger"
-            :class="{ open: formatOpen }"
+            :class="{ open: openMenu === 'format' }"
             :title="info.note"
             aria-label="File format"
             aria-haspopup="menu"
-            :aria-expanded="formatOpen"
-            @click="setFormatOpen(!formatOpen)"
+            :aria-expanded="openMenu === 'format'"
+            @click="toggleMenu('format')"
           >
             .{{ format }}
             <Icon name="chevron" class="chevron" />
           </button>
-          <div v-if="formatOpen" class="menu-pop format-pop" role="menu">
+          <div v-if="openMenu === 'format'" class="menu-pop format-pop" role="menu">
             <span class="menu-label">Format</span>
             <button
               v-for="f in ALL_FORMATS"
@@ -189,28 +202,35 @@ defineExpose({ save, saveAs });
       </div>
     </div>
 
-    <div class="export-actions">
+    <div ref="actionsMenu" class="export-actions">
       <button
         class="icon-only"
-        :disabled="!ready"
-        :title="`Copy to clipboard (${modKey}C)`"
-        aria-label="Copy to clipboard"
-        @click="emit('copy')"
+        :class="{ open: openMenu === 'actions' }"
+        title="Save and copy"
+        aria-label="Save and copy"
+        aria-haspopup="menu"
+        :aria-expanded="openMenu === 'actions'"
+        @click="toggleMenu('actions')"
       >
-        <Icon name="copy" />
+        <Icon name="more" />
       </button>
-      <button
-        class="icon-only"
-        :disabled="!ready || busy"
-        :title="`Save As… (${modKey}⇧S)`"
-        aria-label="Save As"
-        @click="saveAs"
-      >
-        <Icon name="saveAs" />
-      </button>
-      <button class="primary" :disabled="!ready || busy" :title="`Save (${modKey}S)`" @click="save">
-        Save
-      </button>
+      <div v-if="openMenu === 'actions'" class="menu-pop actions-pop" role="menu">
+        <button class="menu-item" role="menuitem" :disabled="!ready || busy" @click="runAction(save)">
+          <Icon name="check" />
+          <span>Save</span>
+          <kbd>{{ modKey }}S</kbd>
+        </button>
+        <button class="menu-item" role="menuitem" :disabled="!ready || busy" @click="runAction(saveAs)">
+          <Icon name="saveAs" />
+          <span>Save As…</span>
+          <kbd>{{ modKey }}⇧S</kbd>
+        </button>
+        <button class="menu-item" role="menuitem" :disabled="!ready" @click="runAction(() => emit('copy'))">
+          <Icon name="copy" />
+          <span>Copy to clipboard</span>
+          <kbd>{{ modKey }}C</kbd>
+        </button>
+      </div>
     </div>
 
   </div>
