@@ -290,7 +290,10 @@ pub fn from_json(raw: &str) -> Result<Settings, String> {
         return Err("\"blur\" must be between 0 and 40.".into());
     }
     if !is_background_color(&settings.background_color) {
-        return Err("\"backgroundColor\" must be a color like \"#1e1e1e\", or empty for the theme's own.".into());
+        return Err(
+            "\"backgroundColor\" must be a color like \"#1e1e1e\", or empty for the theme's own."
+                .into(),
+        );
     }
     if !SETUP_STEPS.contains(&settings.setup_step.as_str()) {
         return Err("\"setupStep\" must be \"permission\", \"hotkeys\", \"tray\" or empty.".into());
@@ -397,7 +400,8 @@ mod tests {
         assert_eq!(old.background_color, "#ffffff");
         assert!(!migrate_appearance(&mut old));
 
-        let mut chosen = from_json(r#"{ "opacity": 0.3, "blur": 10, "backgroundColor": "" }"#).unwrap();
+        let mut chosen =
+            from_json(r#"{ "opacity": 0.3, "blur": 10, "backgroundColor": "" }"#).unwrap();
         assert!(!migrate_appearance(&mut chosen));
         assert_eq!(chosen.blur, 10);
         assert_eq!(chosen.opacity, 0.3);
