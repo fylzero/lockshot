@@ -23,9 +23,10 @@ const scrollPageLimits = computed(() =>
   [...new Set([50, 100, 200, 500, 1000, settings.value?.scrollMaxPages ?? 200])].sort((a, b) => a - b),
 );
 
-/* Window opacity and Background blur, as in Dispatch. */
-const DEFAULT_OPACITY = 0.3;
-const DEFAULT_BLUR = 4;
+/* Window opacity, Background blur, and Background color: a faint white glass. */
+const DEFAULT_OPACITY = 0.05;
+const DEFAULT_BLUR = 30;
+const DEFAULT_BACKGROUND = "#ffffff";
 /* macOS takes a blur radius; Windows only has its on/off Acrylic blur; Linux has none. */
 const blurSupported = isMac || isWindows;
 const blurHint = isMac
@@ -556,7 +557,7 @@ const EDITOR_KEYS = [
           <div class="row">
             <div class="row-label">
               Background color
-              <small>Behind the image in the editor. Reset goes back to the theme's own.</small>
+              <small>Behind the image in the editor. Reset goes back to white.</small>
             </div>
             <div class="row-control">
               <label class="color-chip" title="Pick a color">
@@ -572,8 +573,8 @@ const EDITOR_KEYS = [
               <button
                 class="ghost"
                 title="Reset"
-                :disabled="!settings.backgroundColor"
-                @click="setBackgroundColor('')"
+                :disabled="settings.backgroundColor.toLowerCase() === DEFAULT_BACKGROUND"
+                @click="setBackgroundColor(DEFAULT_BACKGROUND)"
               >
                 <Icon name="reset" />
               </button>

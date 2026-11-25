@@ -15,6 +15,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "An update found while you're working doesn't interrupt you. The tab bar icon appears right away, and the prompt waits until you next come back to the window.",
       "Turn this off with Check for updates automatically in General settings. Check for Updates… in the menu still works either way.",
       "Later is remembered across restarts. Automatic checks wait a day before asking about that version again, while Check for Updates… always asks.",
+      "New Appearance defaults for the background behind the image: white at 5% opacity with a 30px blur, for a frosted-glass look with more contrast against the image. If you never changed these, you get the new look when you update; any you changed stay as they are. Reset on Background color now goes back to white.",
     ],
   },
   {

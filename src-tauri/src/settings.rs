@@ -120,8 +120,8 @@ pub struct Settings {
     pub opacity: f32,
     /// Blur radius behind that see-through background, 0 (off) to 40.
     pub blur: u32,
-    /// The background behind the image as "#rrggbb". Empty means the
-    /// theme's own: near-black, or white in the light theme.
+    /// The background behind the image as "#rrggbb", white by default.
+    /// Empty means the theme's own: near-black, or white in the light theme.
     pub background_color: String,
     /// Setup on Home is finished; until then the window opens at launch.
     pub onboarded: bool,
@@ -153,9 +153,9 @@ impl Default for Settings {
             resize_window_to_capture: true,
             always_actual_size: false,
             theme: "system".into(),
-            opacity: 0.3,
-            blur: 4,
-            background_color: String::new(),
+            opacity: 0.05,
+            blur: 30,
+            background_color: "#ffffff".into(),
             onboarded: false,
             setup_step: String::new(),
         }
@@ -180,10 +180,28 @@ pub fn load(app: &AppHandle) -> Settings {
     let Ok(path) = path(app) else {
         return Settings::default();
     };
-    fs::read_to_string(path)
+    let mut settings: Settings = fs::read_to_string(path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if migrate_appearance(&mut settings) {
+        let _ = save(app, &settings);
+    }
+    settings
+}
+
+/// Settings saved by 1.5.0 hold its appearance defaults (30% opacity, 4px
+/// blur, the theme's background). Move anyone still on all three to the
+/// current defaults; a changed value means it was chosen, so it stays.
+fn migrate_appearance(settings: &mut Settings) -> bool {
+    if settings.opacity != 0.3 || settings.blur != 4 || !settings.background_color.is_empty() {
+        return false;
+    }
+    let defaults = Settings::default();
+    settings.opacity = defaults.opacity;
+    settings.blur = defaults.blur;
+    settings.background_color = defaults.background_color;
+    true
 }
 
 pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
@@ -368,6 +386,21 @@ mod tests {
         assert_eq!(parsed.jpeg_quality, 90);
         assert!(parsed.launch_at_login);
         assert!(parsed.keep_running_in_background);
+    }
+
+    #[test]
+    fn migrates_the_old_appearance_defaults() {
+        let mut old = from_json(r#"{ "opacity": 0.3, "blur": 4, "backgroundColor": "" }"#).unwrap();
+        assert!(migrate_appearance(&mut old));
+        assert_eq!(old.opacity, 0.05);
+        assert_eq!(old.blur, 30);
+        assert_eq!(old.background_color, "#ffffff");
+        assert!(!migrate_appearance(&mut old));
+
+        let mut chosen = from_json(r#"{ "opacity": 0.3, "blur": 10, "backgroundColor": "" }"#).unwrap();
+        assert!(!migrate_appearance(&mut chosen));
+        assert_eq!(chosen.blur, 10);
+        assert_eq!(chosen.opacity, 0.3);
     }
 
     #[test]
