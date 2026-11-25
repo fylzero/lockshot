@@ -504,6 +504,42 @@ pub fn place_overlay(window: &tauri::WebviewWindow, display_id: u32, bounds: (i3
 }
 
 /**
+ * Show a window fully transparent, or make it opaque again. A capture
+ * overlay is kept hidden between captures, and macOS does not repaint a
+ * hidden webview, so showing it straight away could flash the last capture's
+ * frozen screen for a frame before the new one is drawn (issue #40). It is
+ * shown see-through first and made opaque once the new frame has rendered.
+ */
+#[cfg(target_os = "macos")]
+pub fn show_window_with_alpha(window: &tauri::WebviewWindow, alpha: f64, show: bool) {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    let target = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        if let Ok(ns_window) = target.ns_window() {
+            let ns_window = ns_window as *mut AnyObject;
+            if !ns_window.is_null() {
+                unsafe {
+                    let _: () = msg_send![ns_window, setAlphaValue: alpha];
+                }
+            }
+        }
+        /* After the alpha, on the same main thread turn, so it never shows opaque. */
+        if show {
+            let _ = target.show();
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn show_window_with_alpha(window: &tauri::WebviewWindow, _alpha: f64, show: bool) {
+    if show {
+        let _ = window.show();
+    }
+}
+
+/**
  * Let the main window follow the user between Spaces: when it is shown it
  * moves to the Space they are on, instead of macOS switching them to the
  * Space it was last on. Set once; must run on the main thread.

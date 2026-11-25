@@ -228,6 +228,8 @@ pub fn run() {
             commands::scroll_skip_text,
             commands::overlay_pending,
             commands::overlay_refit,
+            commands::overlay_show,
+            commands::overlay_reveal,
             commands::cancel_area,
             commands::latest_capture,
             commands::release_capture,

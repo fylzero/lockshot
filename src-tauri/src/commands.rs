@@ -240,6 +240,18 @@ pub fn overlay_refit(app: AppHandle, window: WebviewWindow) -> Result<(), String
     capture::refit_overlay(&app, window.label())
 }
 
+/// Show a capture overlay see-through, before its new frame has rendered.
+#[tauri::command]
+pub fn overlay_show(window: WebviewWindow) {
+    crate::platform::show_window_with_alpha(&window, 0.0, true);
+}
+
+/// Make a capture overlay opaque, once its new frame has rendered.
+#[tauri::command]
+pub fn overlay_reveal(window: WebviewWindow) {
+    crate::platform::show_window_with_alpha(&window, 1.0, false);
+}
+
 #[tauri::command]
 pub fn cancel_area(app: AppHandle) {
     capture::cancel_area(&app);

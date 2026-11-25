@@ -127,6 +127,21 @@ async function ensureFit(next: OverlayStart) {
   });
 }
 
+/** Wait for the page to render a few frames, or give up after a moment. */
+function nextFrames(count: number) {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 150);
+    const step = (left: number) =>
+      requestAnimationFrame(() => {
+        if (left <= 1) {
+          clearTimeout(timer);
+          resolve();
+        } else step(left - 1);
+      });
+    step(count);
+  });
+}
+
 /** Show a new capture: draw its frozen display, then appear. */
 async function begin(next: OverlayStart) {
   const started = performance.now();
@@ -154,7 +169,15 @@ async function begin(next: OverlayStart) {
   await ensureFit(next);
   if (session.value !== next.session) return;
   loaded.value = true;
-  await win.show();
+  /*
+   * A hidden webview is not repainted, so it still holds the last capture's
+   * screen. Show it see-through, let the new frame render, then make it
+   * opaque, so the old one never flashes up (issue #40).
+   */
+  await api.overlayShow();
+  await nextFrames(2);
+  if (session.value !== next.session) return;
+  await api.overlayReveal();
   if (import.meta.env.DEV) {
     /* Shows up in the tauri dev terminal, for checking speed and geometry. */
     const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
