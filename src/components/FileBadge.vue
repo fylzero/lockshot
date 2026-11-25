@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { api, errorMessage } from "../api";
 import { showToast, type CaptureDoc } from "../store";
 import { FORMAT_INFO } from "../formats";
@@ -124,6 +124,41 @@ async function startDrag() {
   }
 }
 
+/*
+ * macOS lets a press reach a background window only where Rust is told to,
+ * so it knows where the icon is: as the window goes to the background, and
+ * whenever the icon moves or shows while it is there.
+ */
+const badge = ref<HTMLElement | null>(null);
+let reported = "";
+function reportHandle() {
+  const el = badge.value;
+  let rect: [number, number, number, number] | null = null;
+  if (el && props.ready && props.active && !props.busy) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) rect = [r.left, r.top, r.width, r.height];
+  }
+  const key = JSON.stringify(rect);
+  if (key === reported) return;
+  reported = key;
+  api.setDragHandle(rect).catch(() => {});
+}
+let observer: ResizeObserver | undefined;
+onMounted(() => {
+  window.addEventListener("blur", reportHandle);
+  window.addEventListener("resize", reportHandle);
+  observer = new ResizeObserver(reportHandle);
+  if (badge.value?.offsetParent) observer.observe(badge.value.offsetParent);
+  reportHandle();
+});
+watch(() => [props.ready, props.active, props.busy], reportHandle, { flush: "post" });
+onBeforeUnmount(() => {
+  window.removeEventListener("blur", reportHandle);
+  window.removeEventListener("resize", reportHandle);
+  observer?.disconnect();
+  if (reported !== "null") void api.setDragHandle(null).catch(() => {});
+});
+
 const badgeTitle = computed(() =>
   props.ready
     ? `Drag to drop ${props.capture.name}.${props.format} anywhere: the Desktop, a folder, a browser, a chat…`
@@ -133,6 +168,7 @@ const badgeTitle = computed(() =>
 
 <template>
   <div
+    ref="badge"
     class="file-badge"
     :class="{ draggable: ready, dragging }"
     :title="badgeTitle"

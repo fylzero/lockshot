@@ -356,6 +356,15 @@ pub async fn start_drag(window: WebviewWindow) -> Result<(), String> {
     drag_out::start(window).await
 }
 
+/// Where the file icon is, so it can be grabbed while the window is in the background.
+#[tauri::command]
+pub fn set_drag_handle(
+    window: WebviewWindow,
+    rect: Option<drag_out::HandleRect>,
+) -> Result<(), String> {
+    drag_out::set_handle(window, rect)
+}
+
 #[tauri::command]
 pub fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
     app.opener()

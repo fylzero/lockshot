@@ -183,6 +183,7 @@ export function installMock() {
       case "drag_file":
         return null;
       case "start_drag":
+      case "set_drag_handle":
         return null;
       case "plugin:dialog|open":
         return "/Users/demo/Pictures/Sample.png";

@@ -18,6 +18,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Save, Save As, and Copy to clipboard moved into a ⋮ menu beside the file name. Their shortcuts still work, and Enter in the file name still saves.",
       "While cropping, Apply and Cancel sit inside the crop box's lower-right corner, or just below a box too small to hold them.",
       "The file icon in the lower-right corner of the editor is a little larger, so it's easier to grab and drag out.",
+      "On macOS, you can drag the file icon out of the Lockshot window while another app is in front, without clicking Lockshot first. The window stays behind the app you drop into; a plain click on the icon still brings Lockshot forward.",
     ],
   },
   {

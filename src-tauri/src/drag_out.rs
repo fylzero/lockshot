@@ -194,6 +194,169 @@ pub async fn start(window: WebviewWindow) -> Result<(), String> {
         .map_err(|err| format!("Could not start the drag: {err}"))
 }
 
+/// Where the file icon is in the window, in CSS pixels: x, y, width, height.
+pub type HandleRect = [f64; 4];
+
+/**
+ * Tell AppKit where the file icon is, so a press on it reaches the page while
+ * the window is in the background (macOS). Windows and Linux already pass a
+ * click on a background window through.
+ */
+pub fn set_handle(window: WebviewWindow, rect: Option<HandleRect>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let ns_window = window.ns_window().map_err(|err| err.to_string())? as usize;
+        window
+            .with_webview(move |webview| first_mouse::set(ns_window, webview.inner(), rect))
+            .map_err(|err| err.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, rect);
+        Ok(())
+    }
+}
+
+/**
+ * A click on a background window only activates it on macOS; the page never
+ * sees the press, so grabbing the icon of a Lockshot window behind another
+ * app did nothing. The webview says yes to that first click over the icon
+ * alone (everywhere else it would draw, crop or press a button by surprise),
+ * and asks AppKit to hold the window where it is: a drag leaves it behind
+ * the app it is dropped into, and a plain click brings it forward as usual.
+ */
+#[cfg(target_os = "macos")]
+mod first_mouse {
+    use super::HandleRect;
+    use std::ffi::c_void;
+    use std::sync::{Mutex, Once, OnceLock};
+
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
+    use objc2::{sel, ClassType};
+    use objc2_app_kit::{NSEvent, NSView};
+
+    /// The icon's window (its pointer) and where the icon is in it.
+    static HANDLE: Mutex<Option<(usize, HandleRect)>> = Mutex::new(None);
+    static ACCEPT: OnceLock<Imp> = OnceLock::new();
+    static DELAY: OnceLock<Imp> = OnceLock::new();
+    static INSTALL: Once = Once::new();
+
+    type Handler = unsafe extern "C-unwind" fn(&NSView, Sel, *mut NSEvent) -> Bool;
+
+    /// `window` is the NSWindow and `webview` its WKWebView, both as pointers.
+    pub fn set(ptr: usize, webview: *mut c_void, rect: Option<HandleRect>) {
+        /* wry names its webview class itself, so take the class from the webview. */
+        INSTALL.call_once(|| match unsafe { (webview as *const AnyObject).as_ref() } {
+            Some(view) => install(view.class()),
+            None => eprintln!("Lockshot: no webview to let the file icon take a first click."),
+        });
+        let mut handle = HANDLE.lock().unwrap();
+        match rect {
+            Some(rect) => *handle = Some((ptr, rect)),
+            /* Only the window that set it may clear it. */
+            None if handle.is_some_and(|(p, _)| p == ptr) => *handle = None,
+            None => {}
+        }
+    }
+
+    /// Whether `event` is a press on the icon in `view`'s window.
+    fn over_handle(view: &NSView, event: *mut NSEvent) -> bool {
+        let Some(event) = (unsafe { event.as_ref() }) else {
+            return false;
+        };
+        let Some((ptr, [x, y, w, h])) = *HANDLE.lock().unwrap() else {
+            return false;
+        };
+        let Some(window) = view.window() else {
+            return false;
+        };
+        if Retained::as_ptr(&window) as usize != ptr {
+            return false;
+        }
+        let at = view.convertPoint_fromView(event.locationInWindow(), None);
+        let top = if view.isFlipped() {
+            at.y
+        } else {
+            view.bounds().size.height - at.y
+        };
+        at.x >= x && at.x <= x + w && top >= y && top <= y + h
+    }
+
+    unsafe extern "C-unwind" fn accepts_first_mouse(
+        view: &NSView,
+        sel: Sel,
+        event: *mut NSEvent,
+    ) -> Bool {
+        if over_handle(view, event) {
+            return Bool::YES;
+        }
+        match ACCEPT.get() {
+            Some(original) => unsafe {
+                std::mem::transmute::<Imp, Handler>(*original)(view, sel, event)
+            },
+            None => Bool::NO,
+        }
+    }
+
+    unsafe extern "C-unwind" fn should_delay_window_ordering(
+        view: &NSView,
+        sel: Sel,
+        event: *mut NSEvent,
+    ) -> Bool {
+        if over_handle(view, event) {
+            return Bool::YES;
+        }
+        match DELAY.get() {
+            Some(inherited) => unsafe {
+                std::mem::transmute::<Imp, Handler>(*inherited)(view, sel, event)
+            },
+            None => Bool::NO,
+        }
+    }
+
+    /// Put both answers on wry's webview class.
+    fn install(class: &AnyClass) {
+        let class = class as *const AnyClass as *mut AnyClass;
+        let accept = sel!(acceptsFirstMouse:);
+        let delay = sel!(shouldDelayWindowOrderingForEvent:);
+        unsafe {
+            let types = objc2::ffi::method_getTypeEncoding(objc2::ffi::class_getInstanceMethod(
+                NSView::class(),
+                accept,
+            ));
+            let imp = std::mem::transmute::<Handler, Imp>(accepts_first_mouse);
+            if let Some(original) = objc2::ffi::class_replaceMethod(class, accept, imp, types) {
+                let _ = ACCEPT.set(original);
+            }
+            /* WryWebView inherits this one: keep the inherited answer for every other press. */
+            let method = objc2::ffi::class_getInstanceMethod(class, delay);
+            if let Some(inherited) = method.as_ref() {
+                let _ = DELAY.set(inherited.implementation());
+            }
+            let imp = std::mem::transmute::<Handler, Imp>(should_delay_window_ordering);
+            objc2::ffi::class_replaceMethod(
+                class,
+                delay,
+                imp,
+                objc2::ffi::method_getTypeEncoding(objc2::ffi::class_getInstanceMethod(
+                    NSView::class(),
+                    delay,
+                )),
+            );
+        }
+    }
+
+    /// The window is held back for this press: keep it there for the drag.
+    pub fn keep_behind() {
+        unsafe {
+            let app: Retained<objc2::runtime::AnyObject> =
+                objc2::msg_send![objc2::class!(NSApplication), sharedApplication];
+            let _: () = objc2::msg_send![&app, preventWindowOrdering];
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod mac {
     use super::{DragFile, DragStatus};
@@ -549,6 +712,10 @@ mod mac {
             event,
             ProtocolObject::from_ref(&*source),
         );
+        /* Pressed while in the background: stay there, behind the app it is dropped into. */
+        if !window.isKeyWindow() {
+            super::first_mouse::keep_behind();
+        }
         session.setAnimatesToStartingPositionsOnCancelOrFail(true);
         SOURCE.with(|s| *s.borrow_mut() = Some((source, delegate)));
         Ok(())

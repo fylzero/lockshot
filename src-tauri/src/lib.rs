@@ -234,6 +234,7 @@ pub fn run() {
             commands::arm_drag,
             commands::drag_file,
             commands::start_drag,
+            commands::set_drag_handle,
             commands::reveal_path,
             commands::reveal_settings_file,
             commands::open_folder,

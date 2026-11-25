@@ -82,6 +82,9 @@ export const api = {
     return invoke<void>("drag_file", saveBody(png, options));
   },
   startDrag: () => invoke<void>("start_drag"),
+  /** Where the file icon is (CSS pixels), so it can be grabbed in a background window; null when hidden. */
+  setDragHandle: (rect: [number, number, number, number] | null) =>
+    invoke<void>("set_drag_handle", { rect }),
 };
 
 type SaveOptions = { format: ExportFormat; path?: string; dir?: string; name?: string; id?: string };
