@@ -70,6 +70,7 @@ const {
   checkForUpdates,
   installUpdate,
   dismissPrompt,
+  startAutoChecks,
 } = useUpdater();
 
 /** Check for Updates… from the tray menu or the change log: always report back. */
@@ -130,8 +131,12 @@ onMounted(async () => {
   }
   const pending = await api.takePendingRoute().catch(() => null);
   if (pending) void router.push(pending);
-  /* Quietly look for a newer release; the tab bar shows an icon if there is one. */
-  if (!import.meta.env.DEV) void checkForUpdates({ prompt: false, silent: true });
+  /*
+   * Look for a newer release now and every few hours. The tab bar shows an
+   * icon; the prompt opens when the window is in front, and a notification
+   * says so while Lockshot is only in the menu bar.
+   */
+  unlisten.push(startAutoChecks(() => settings.value?.autoCheckUpdates ?? true));
 });
 
 onBeforeUnmount(() => {

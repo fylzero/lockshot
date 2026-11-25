@@ -110,6 +110,7 @@ export function installMock() {
     scrollText: false,
     launchAtLogin: true,
     keepRunningInBackground: true,
+    autoCheckUpdates: true,
     editorScreen: "",
     resizeWindowToCapture: true,
     alwaysActualSize: false,

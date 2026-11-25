@@ -102,6 +102,9 @@ pub struct Settings {
     /// macOS: Cmd+Q closes the window and leaves Lockshot in the menu bar,
     /// so the hotkeys keep working. Quit from the menu bar icon still quits.
     pub keep_running_in_background: bool,
+    /// Look for a new release at launch and every few hours, and say when one
+    /// is ready to install.
+    pub auto_check_updates: bool,
     /// The screen the editor opens on, by the name Settings lists it under.
     /// Empty means the screen the capture was taken on (under the pointer).
     /// A screen that is not connected falls back to that too.
@@ -145,6 +148,7 @@ impl Default for Settings {
             scroll_text: false,
             launch_at_login: true,
             keep_running_in_background: true,
+            auto_check_updates: true,
             editor_screen: String::new(),
             resize_window_to_capture: true,
             always_actual_size: false,

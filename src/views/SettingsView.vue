@@ -464,6 +464,16 @@ const EDITOR_KEYS = [
           </div>
           <div class="row">
             <div class="row-label">
+              Check for updates automatically
+              <small>Looks for a new version when Lockshot starts and every few hours. You get a notification when one is ready, and Lockshot asks before installing it.</small>
+            </div>
+            <label class="switch">
+              <input v-model="settings.autoCheckUpdates" type="checkbox" @change="saveSettingsSoon" />
+              <span />
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-label">
               Open the editor on
               <small>Lockshot always opens on the desktop you're on. Pick a screen to keep it there; if that screen is unplugged it opens where you captured.</small>
             </div>

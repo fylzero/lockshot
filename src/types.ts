@@ -39,6 +39,8 @@ export interface Settings {
   launchAtLogin: boolean;
   /** macOS: Cmd+Q hides the window and leaves Lockshot in the menu bar. */
   keepRunningInBackground: boolean;
+  /** Look for a new release at launch and every few hours, and say when one is ready. */
+  autoCheckUpdates: boolean;
   /** The screen the editor opens on; empty means the one you captured on. */
   editorScreen: string;
   /** Size the window to each capture that opens, up to the screen's size. */
