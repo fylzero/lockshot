@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.6.2",
+    date: "November 25, 2026",
+    notes: [
+      "While typing or editing text, the box around it now stays snug against the text instead of leaving more and more empty space on the right as the line gets longer.",
+    ],
+  },
+  {
     version: "1.6.1",
     date: "November 25, 2026",
     notes: [

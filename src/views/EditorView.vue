@@ -23,6 +23,7 @@ import {
   type StepShape,
   textOutlineColor,
   textOutlineWidth,
+  measureTextWidth,
   type TextOutline,
   type TextShape,
   type Tool,
@@ -1002,11 +1003,14 @@ const textBox = computed(() => {
   if (!t) return null;
   const fontSize = t.size * cssScale.value;
   const lines = editingText.value.split("\n");
-  const longest = Math.max(4, ...lines.map((l) => l.length));
+  /* Hug the text: its real measured width (at least the "Text" placeholder),
+     plus the outline on both sides, the dashed border and room for the caret. */
+  const outline = textOutlineColor(t) ? textOutlineWidth(t.size) * cssScale.value : 0;
+  const textWidth = Math.max(measureTextWidth(["Text"], fontSize), measureTextWidth(lines, fontSize));
   return {
     left: (t.x - view.value.x) * cssScale.value,
     top: (t.y - view.value.y) * cssScale.value,
-    width: longest * fontSize * 0.62 + 12,
+    width: Math.ceil(textWidth + outline + 2 + Math.max(2, fontSize * 0.08)),
     height: lines.length * fontSize * TEXT_LINE_HEIGHT + 6,
     fontSize,
   };

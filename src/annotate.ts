@@ -129,6 +129,12 @@ export function stepTip(shape: StepShape) {
 /** Half the width of a stamp's cone where it leaves the circle's center. */
 const coneHalfWidth = (size: number) => size * 0.6;
 
+/** The widest line of `lines`, drawn bold at `size` px, in px. */
+export function measureTextWidth(lines: string[], size: number) {
+  measureCtx.font = `700 ${size}px ${TEXT_FONT}`;
+  return Math.max(0, ...lines.map((l) => measureCtx.measureText(l || " ").width));
+}
+
 export function textBounds(shape: TextShape): Rect {
   measureCtx.font = `700 ${shape.size}px ${TEXT_FONT}`;
   const lines = textLines(shape);
