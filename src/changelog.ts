@@ -7,6 +7,13 @@ export interface ChangelogRelease {
 /* Newest first. Add an entry with every version bump. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: "1.6.1",
+    date: "November 25, 2026",
+    notes: [
+      "On Windows, the Lockshot installer is now signed by RazorKode LLC, so Windows names RazorKode LLC as the publisher instead of an unknown one. For a little while after a new release, SmartScreen may still say Windows protected your PC; click More info, then Run anyway.",
+    ],
+  },
+  {
     version: "1.6.0",
     date: "November 25, 2026",
     notes: [
