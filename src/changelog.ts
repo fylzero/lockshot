@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogRelease[] = [
     date: "November 25, 2026",
     notes: [
       "While typing or editing text, the box around it now stays snug against the text instead of leaving more and more empty space on the right as the line gets longer.",
+      "Capture Area, Capture Window and Scrolling Capture show the crosshair pointer right away. Before, it often stayed the normal arrow until you moved the mouse.",
     ],
   },
   {

@@ -308,9 +308,11 @@ fn place_overlay(app: &AppHandle, bounds: &Bounds, focus: bool) -> Result<Webvie
             let builder = builder
                 .position(bounds.x as f64, bounds.y as f64)
                 .inner_size(bounds.width as f64, bounds.height as f64);
-            builder
+            let window = builder
                 .build()
-                .map_err(|err| format!("Could not open the capture overlay: {err}"))?
+                .map_err(|err| format!("Could not open the capture overlay: {err}"))?;
+            platform::crosshair_over(&window);
+            window
         }
     };
     /*

@@ -521,6 +521,14 @@ pub fn show_window_with_alpha(window: &tauri::WebviewWindow, alpha: f64, show: b
             let ns_window = ns_window as *mut AnyObject;
             if !ns_window.is_null() {
                 unsafe {
+                    /*
+                     * A window at alpha 0 does not count as under the mouse,
+                     * and it becomes key while still see-through, so AppKit
+                     * put up the cursor of whatever was behind it: the arrow,
+                     * until the mouse moved (issue #44). Taking mouse events
+                     * regardless keeps it under the pointer from the start.
+                     */
+                    let _: () = msg_send![ns_window, setIgnoresMouseEvents: false];
                     let _: () = msg_send![ns_window, setAlphaValue: alpha];
                 }
             }
@@ -531,6 +539,76 @@ pub fn show_window_with_alpha(window: &tauri::WebviewWindow, alpha: f64, show: b
         }
     });
 }
+
+/*
+ * Answers AppKit's cursorUpdate: with the crosshair. It owns a tracking area
+ * over each capture overlay's webview; see `crosshair_over`.
+ */
+#[cfg(target_os = "macos")]
+objc2::define_class!(
+    #[unsafe(super(objc2::runtime::NSObject))]
+    #[name = "LockshotCrosshair"]
+    struct CrosshairOwner;
+
+    impl CrosshairOwner {
+        #[unsafe(method(cursorUpdate:))]
+        fn cursor_update(&self, _event: *mut objc2::runtime::AnyObject) {
+            use objc2::runtime::AnyObject;
+            use objc2::{class, msg_send};
+            unsafe {
+                let cursor: *mut AnyObject = msg_send![class!(NSCursor), crosshairCursor];
+                if !cursor.is_null() {
+                    let _: () = msg_send![cursor, set];
+                }
+            }
+        }
+    }
+);
+
+/**
+ * Show the crosshair over a capture overlay as soon as it appears. The page
+ * asks for it in CSS, but WebKit only applies that on a mouse move. When the
+ * overlay becomes the key window (and Lockshot the active app), AppKit asks
+ * the view under the pointer for its cursor with cursorUpdate:, and WebKit
+ * does not answer, so AppKit put up the arrow. Under a still pointer it stayed
+ * the arrow until the mouse moved (issue #44). A cursor-update tracking area
+ * over the whole webview answers with the crosshair. Call once per overlay.
+ */
+#[cfg(target_os = "macos")]
+pub fn crosshair_over(window: &tauri::WebviewWindow) {
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send, AnyThread};
+    use objc2_foundation::NSRect;
+
+    /// NSTrackingCursorUpdate | NSTrackingActiveAlways | NSTrackingInVisibleRect
+    const OPTIONS: usize = 0x04 | 0x80 | 0x200;
+    let _ = window.with_webview(|webview| unsafe {
+        let view = webview.inner() as *mut AnyObject;
+        if view.is_null() {
+            return;
+        }
+        /* A tracking area does not keep its owner, so this one lives for good. */
+        let owner: Retained<CrosshairOwner> = msg_send![CrosshairOwner::alloc(), init];
+        let owner = Retained::into_raw(owner) as *mut AnyObject;
+        let area: *mut AnyObject = msg_send![class!(NSTrackingArea), alloc];
+        let area: *mut AnyObject = msg_send![
+            area,
+            initWithRect: NSRect::ZERO,
+            options: OPTIONS,
+            owner: owner,
+            userInfo: std::ptr::null_mut::<AnyObject>()
+        ];
+        if area.is_null() {
+            return;
+        }
+        let _: () = msg_send![view, addTrackingArea: area];
+        let _: () = msg_send![area, release];
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn crosshair_over(_window: &tauri::WebviewWindow) {}
 
 #[cfg(not(target_os = "macos"))]
 pub fn show_window_with_alpha(window: &tauri::WebviewWindow, _alpha: f64, show: bool) {
