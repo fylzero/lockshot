@@ -408,15 +408,9 @@ a {
 
 .capture-cards {
   display: grid;
-  /* Four in a row at full width, two by two when the window is narrow. */
+  /* Always four in a row: they still fit at the window's minimum width. */
   grid-template-columns: repeat(4, 1fr);
   gap: 0.85rem;
-}
-
-@media (max-width: 52rem) {
-  .capture-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 .capture-card {

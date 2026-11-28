@@ -13,6 +13,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "While typing or editing text, the box around it now stays snug against the text instead of leaving more and more empty space on the right as the line gets longer.",
       "Capture Area, Capture Window and Scrolling Capture show the crosshair pointer right away. Before, it often stayed the normal arrow until you moved the mouse.",
       "The capture buttons in the tab bar moved into a ⋮ menu beside the version, so they no longer crowd your tabs. The Home screen, the menu bar icon and your hotkeys still capture as before.",
+      "The four capture cards on the Home screen stay in one row however narrow you make the window, instead of switching to two by two. At the smallest window size the Home screen also fits without a scrollbar.",
     ],
   },
   {
