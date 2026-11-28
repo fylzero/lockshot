@@ -97,8 +97,53 @@ async function capture(mode: CaptureMode) {
   }
 }
 
-function hint(label: string, accelerator?: string) {
-  return accelerator ? `${label} (${formatAccelerator(accelerator, env.os)})` : label;
+const CAPTURE_ITEMS: { mode: CaptureMode; label: string }[] = [
+  { mode: "area", label: "Capture area" },
+  { mode: "window", label: "Capture window" },
+  { mode: "scroll", label: "Scrolling capture" },
+  { mode: "screen", label: "Capture screen" },
+];
+
+function shortcut(mode: CaptureMode) {
+  const accelerator = settings.value?.hotkeys[mode];
+  return accelerator ? formatAccelerator(accelerator, env.os) : "";
+}
+
+/* The capture modes live in a ⋮ dropdown, placed like Dispatch's, so they
+   take no room from the tabs. */
+const captureMenu = ref<HTMLElement | null>(null);
+const menuOpen = ref(false);
+
+function closeOnOutside(event: PointerEvent) {
+  if (!captureMenu.value?.contains(event.target as Node)) closeMenu();
+}
+
+function closeOnEscape(event: KeyboardEvent) {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeMenu();
+}
+
+function openMenu() {
+  menuOpen.value = true;
+  window.addEventListener("pointerdown", closeOnOutside, true);
+  window.addEventListener("keydown", closeOnEscape, true);
+  window.addEventListener("blur", closeMenu);
+}
+
+function closeMenu() {
+  menuOpen.value = false;
+  window.removeEventListener("pointerdown", closeOnOutside, true);
+  window.removeEventListener("keydown", closeOnEscape, true);
+  window.removeEventListener("blur", closeMenu);
+}
+
+onBeforeUnmount(closeMenu);
+
+function chooseCapture(mode: CaptureMode) {
+  closeMenu();
+  void capture(mode);
 }
 </script>
 
@@ -157,46 +202,40 @@ function hint(label: string, accelerator?: string) {
       >
         <Icon name="update" />
       </button>
-      <button
-        class="tab-tool"
-        type="button"
-        :title="screenAllowed ? hint('Capture area', settings?.hotkeys.area) : 'Allow Screen Recording to capture'"
-        :disabled="!screenAllowed"
-        aria-label="Capture area"
-        @click="capture('area')"
-      >
-        <Icon name="area" />
-      </button>
-      <button
-        class="tab-tool"
-        type="button"
-        :title="screenAllowed ? hint('Capture window', settings?.hotkeys.window) : 'Allow Screen Recording to capture'"
-        :disabled="!screenAllowed"
-        aria-label="Capture window"
-        @click="capture('window')"
-      >
-        <Icon name="window" />
-      </button>
-      <button
-        class="tab-tool"
-        type="button"
-        :title="screenAllowed ? hint('Scrolling capture', settings?.hotkeys.scroll) : 'Allow Screen Recording to capture'"
-        :disabled="!screenAllowed"
-        aria-label="Scrolling capture"
-        @click="capture('scroll')"
-      >
-        <Icon name="scroll" />
-      </button>
-      <button
-        class="tab-tool"
-        type="button"
-        :title="screenAllowed ? hint('Capture screen', settings?.hotkeys.screen) : 'Allow Screen Recording to capture'"
-        :disabled="!screenAllowed"
-        aria-label="Capture screen"
-        @click="capture('screen')"
-      >
-        <Icon name="screen" />
-      </button>
+      <div ref="captureMenu" class="tab-menu">
+        <button
+          class="tab-tool"
+          :class="{ active: menuOpen }"
+          type="button"
+          title="Capture"
+          aria-label="Capture"
+          aria-haspopup="menu"
+          :aria-expanded="menuOpen"
+          @click="menuOpen ? closeMenu() : openMenu()"
+        >
+          <svg class="tab-tool-dots" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="5.5" r="1.6" />
+            <circle cx="12" cy="12" r="1.6" />
+            <circle cx="12" cy="18.5" r="1.6" />
+          </svg>
+        </button>
+        <div v-if="menuOpen" class="menu-pop tab-menu-pop" role="menu">
+          <button
+            v-for="item in CAPTURE_ITEMS"
+            :key="item.mode"
+            class="menu-item"
+            type="button"
+            role="menuitem"
+            :disabled="!screenAllowed"
+            :title="screenAllowed ? undefined : 'Allow Screen Recording to capture'"
+            @click="chooseCapture(item.mode)"
+          >
+            <Icon :name="item.mode" />
+            <span>{{ item.label }}</span>
+            <kbd v-if="shortcut(item.mode)">{{ shortcut(item.mode) }}</kbd>
+          </button>
+        </div>
+      </div>
       <button
         class="tab-version"
         :class="{ active: route.path === '/changelog' }"

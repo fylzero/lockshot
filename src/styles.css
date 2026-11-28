@@ -1761,6 +1761,25 @@ button.tab-version.active:hover:not(:disabled) {
   opacity: 0.55;
 }
 
+.tab-tool svg.tab-tool-dots {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* The ⋮ capture menu drops down from the tab bar, its right edge on the button's. */
+.tab-menu {
+  position: relative;
+  display: flex;
+}
+
+.menu-pop.tab-menu-pop {
+  top: calc(100% + 4px);
+  left: auto;
+  right: 0;
+  z-index: 60;
+  min-width: 13rem;
+}
+
 .tab-tool svg.tab-tool-github {
   width: 1rem;
   height: 1rem;
