@@ -14,6 +14,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       "Capture Area, Capture Window and Scrolling Capture show the crosshair pointer right away. Before, it often stayed the normal arrow until you moved the mouse.",
       "The capture buttons in the tab bar moved into a ⋮ menu beside the version, so they no longer crowd your tabs. The Home screen, the menu bar icon and your hotkeys still capture as before.",
       "The four capture cards on the Home screen stay in one row however narrow you make the window, instead of switching to two by two. At the smallest window size the Home screen also fits without a scrollbar.",
+      "Each new capture opens with the Arrow tool picked, instead of whichever tool you used last. Your shape, color, size and Redact style are still remembered.",
     ],
   },
   {

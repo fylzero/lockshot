@@ -77,7 +77,8 @@ const OUTLINES: { id: TextOutline; label: string }[] = [
   { id: "none", label: "None" },
 ];
 
-/* The last tool, color, size and redact mode picked, kept across restarts. */
+/* The last shape, color, size and redact mode picked, kept across restarts.
+   The tool itself always starts on Arrow for each new capture. */
 const STYLE_KEY = "editorStyle";
 function readStoredStyle() {
   let saved: Record<string, unknown> = {};
@@ -88,8 +89,6 @@ function readStoredStyle() {
   }
   const size = saved.size as number;
   return {
-    /* Crop is a one-off mode, so it never comes back on launch. */
-    tool: TOOLS.find((t) => t.id === saved.tool && t.id !== "crop")?.id ?? null,
     shapeTool: SHAPE_TOOLS.find((t) => t.id === saved.shapeTool)?.id ?? null,
     color: typeof saved.color === "string" && /^#[0-9a-f]{6}$/i.test(saved.color) ? saved.color : null,
     size: Number.isInteger(size) && size >= 0 && size < SIZES.length ? size : null,
@@ -97,21 +96,16 @@ function readStoredStyle() {
   };
 }
 const storedStyle = readStoredStyle();
-const tool = ref<Tool>(storedStyle.tool ?? "arrow");
+const tool = ref<Tool>("arrow");
 const shapeTool = ref<Tool>(storedStyle.shapeTool ?? "line");
 const color = ref<string>(storedStyle.color ?? COLORS[0]);
 /* Medium by default: bold enough to read at a glance on a full-screen capture. */
 const sizeIndex = ref<number>(storedStyle.size ?? 2);
 const textOutline = ref<TextOutline>("auto");
 const redactMode = ref<RedactMode>(storedStyle.redact ?? "pixelate");
-watch([tool, shapeTool, color, sizeIndex, redactMode], ([t, shape, c, size, redact], [prevTool]) => {
+watch([shapeTool, color, sizeIndex, redactMode], ([shape, c, size, redact]) => {
   try {
-    const saved = JSON.parse(localStorage.getItem(STYLE_KEY) ?? "{}") ?? {};
-    /* Leave the saved tool alone while cropping. */
-    localStorage.setItem(
-      STYLE_KEY,
-      JSON.stringify({ tool: t === "crop" ? (saved.tool ?? prevTool) : t, shapeTool: shape, color: c, size, redact }),
-    );
+    localStorage.setItem(STYLE_KEY, JSON.stringify({ shapeTool: shape, color: c, size, redact }));
   } catch {
     /* only a convenience: the defaults still work */
   }
